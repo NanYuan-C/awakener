@@ -168,17 +168,17 @@
       statRound.textContent = round;
     }
 
-    // Button states
-    const isRunning = (status === 'running');
-    btnStart.disabled = isRunning;
-    btnStop.disabled = !isRunning;
-    btnRestart.disabled = !isRunning;
+    // Button states: running, waiting, and stopping all count as "active"
+    const isActive = (status === 'running' || status === 'waiting' || status === 'stopping');
+    btnStart.disabled = isActive;
+    btnStop.disabled = !isActive;
+    btnRestart.disabled = !isActive;
 
     // Uptime tracking
-    if (isRunning && !startTime) {
+    if (isActive && !startTime) {
       startTime = Date.now();
       uptimeTimer = setInterval(updateUptime, 1000);
-    } else if (!isRunning) {
+    } else if (!isActive) {
       startTime = null;
       if (uptimeTimer) clearInterval(uptimeTimer);
       statUptime.textContent = '-';
