@@ -71,69 +71,101 @@
 
   /**
    * Handle a parsed WebSocket message from the server.
-   * Message types: status, log, round, tool, result, thought, error
+   *
+   * Message types from activator (loop.py):
+   *   - "status"      : { status, next_in?, message? }
+   *   - "log"         : { text }
+   *   - "round"       : { step, event, tools_used?, duration?, notebook_saved? }
+   *   - "tool_call"   : { name, args }
+   *   - "tool_result" : { text }
+   *   - "thought"     : { text }
    *
    * @param {Object} msg - The parsed message object.
    */
   function handleMessage(msg) {
+    var d = msg.data || {};
+
     switch (msg.type) {
       case 'status':
-        updateStatus(msg.data);
+        updateStatus(d);
         break;
 
       case 'round':
-        appendLog('═══ Round ' + msg.data.round + ' ═══', 'round');
-        statRound.textContent = msg.data.round;
+        if (d.event === 'started') {
+          appendLog('═══ Round ' + d.step + ' ═══', 'round');
+          statRound.textContent = d.step || '-';
+        } else if (d.event === 'completed') {
+          appendLog(
+            '[DONE] Round ' + d.step + ' | Tools: ' + (d.tools_used || 0) +
+            ' | Time: ' + (d.duration || '?') + 's | Note: ' +
+            (d.notebook_saved ? 'saved' : 'NOT SAVED'),
+            'system'
+          );
+        }
         break;
 
-      case 'tool':
-        appendLog('[TOOL] ' + msg.data.name + '(' + JSON.stringify(msg.data.args || {}) + ')', 'tool');
+      case 'tool_call':
+        var argsStr = '';
+        try { argsStr = JSON.stringify(d.args || {}); } catch(e) { argsStr = '{}'; }
+        if (argsStr.length > 200) argsStr = argsStr.substring(0, 200) + '...';
+        appendLog('[TOOL] ' + d.name + '(' + argsStr + ')', 'tool');
         totalToolCalls++;
         statTools.textContent = totalToolCalls;
         break;
 
-      case 'result':
-        var preview = (msg.data.output || '').substring(0, 200);
+      case 'tool_result':
+        var preview = (d.text || '').substring(0, 300);
         appendLog('[RESULT] ' + preview, 'result');
         break;
 
       case 'thought':
-        appendLog('[THOUGHT] ' + msg.data.content, 'thought');
-        break;
-
-      case 'error':
-        appendLog('[ERROR] ' + msg.data.message, 'error');
+        var thought = (d.text || '').substring(0, 500);
+        appendLog('[THOUGHT] ' + thought, 'thought');
         break;
 
       case 'log':
-        appendLog(msg.data.message, msg.data.level || 'system');
+        appendLog(d.text || d.message || '', 'system');
+        break;
+
+      case 'error':
+        appendLog('[ERROR] ' + (d.message || d.text || ''), 'error');
         break;
 
       default:
+        // Show raw message for unknown types
         appendLog(JSON.stringify(msg), 'system');
     }
   }
 
   /**
    * Update the agent status display (badge + stats).
-   * @param {Object} data - Status data: { status, round, ... }
+   * @param {Object} data - Status data from WS or REST API.
+   *   WS format: { status, next_in?, message? }
+   *   REST format: { state, is_running, current_round, ... }
    */
   function updateStatus(data) {
-    const status = data.status || 'stopped';
+    // Support both WS format (status) and REST format (state)
+    const status = data.status || data.state || 'idle';
 
     // Update badge
-    statusBadge.className = 'agent-status ' + status;
-    statusText.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+    if (statusBadge) statusBadge.className = 'agent-status ' + status;
+    if (statusText) statusText.textContent = status.charAt(0).toUpperCase() + status.slice(1);
     statStatus.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+
+    // Show waiting info
+    if (status === 'waiting' && data.next_in) {
+      statStatus.textContent = 'Waiting (' + data.next_in + 's)';
+    }
 
     // Pulse animation for running
     if (statusDot) {
       statusDot.classList.toggle('pulse', status === 'running');
     }
 
-    // Update round
-    if (data.round !== undefined) {
-      statRound.textContent = data.round;
+    // Update round (WS sends 'round', REST sends 'current_round' or 'current_step')
+    var round = data.round || data.current_round || data.current_step;
+    if (round !== undefined) {
+      statRound.textContent = round;
     }
 
     // Button states
