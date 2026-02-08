@@ -145,6 +145,8 @@ const messages = {
     memory: {
       title: "Agent Memory",
       notebook: "Notebook",
+      refresh: "Refresh",
+      loading: "Loading memory...",
       no_data: "No memory data yet. The agent hasn't written anything.",
       lines: "lines",
       size: "size",
@@ -279,6 +281,8 @@ const messages = {
     memory: {
       title: "Agent 记忆",
       notebook: "笔记本",
+      refresh: "刷新",
+      loading: "加载记忆中...",
       no_data: "暂无记忆数据。Agent 还没有写入任何内容。",
       lines: "行",
       size: "大小",
