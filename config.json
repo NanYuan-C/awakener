@@ -6,7 +6,7 @@
     "notebook_file": "notebook.md",
 
     "interval": 5,
-    "max_tool_calls_per_activation": 20,
+    "max_tool_calls_per_activation": 50,
     "shell_timeout": 30,
     "max_output_chars": 16000,
 

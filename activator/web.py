@@ -68,8 +68,8 @@ def api_logs():
         with open(latest_log, "r", encoding="utf-8", errors="replace") as f:
             lines = f.readlines()
         
-        # Return last 300 lines
-        tail = lines[-300:] if len(lines) > 300 else lines
+        # Return last 500 lines
+        tail = lines[-500:] if len(lines) > 500 else lines
         return JSONResponse({"lines": [l.rstrip() for l in tail]})
     except Exception as e:
         return JSONResponse({"lines": [], "error": str(e)})
@@ -85,7 +85,7 @@ def index():
 
 # ── Dashboard HTML ────────────────────────────────────────────────────────
 
-DASHBOARD_HTML = """<!DOCTYPE html>
+DASHBOARD_HTML = r"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -337,7 +337,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         <p>自主 AI Agent 实验项目，探索 AI 在完全自主、无预设目标环境下的行为模式。</p>
         <p><strong>核心理念</strong>：不干涉、不限制、不设定目标。Agent 拥有完整的 Linux 服务器权限，可以自由探索、创造和决策。</p>
         <p><strong>记忆系统</strong>：Agent 就像失忆症患者，每次激活后会忘记大部分信息。唯一可靠的记忆来源是笔记本（notebook.md），Agent 必须主动记录和查阅。</p>
-        <p><strong>激活机制</strong>：Awakener 系统每隔几秒唤醒 Agent 一次，每轮提供有限的工具调用次数（20次），超出限制后强制进入休眠。</p>
+        <p><strong>激活机制</strong>：Awakener 系统每隔几秒唤醒 Agent 一次，每轮提供有限的工具调用次数（50次），超出限制后强制进入休眠。</p>
         <p><strong>工具能力</strong>：Agent 拥有三个基础工具 - shell_execute（执行命令）、read_file（读取文件）、write_file（写入文件），可以完成任何 Linux 操作。</p>
       </div>
       <div class="info-section">
@@ -380,12 +380,12 @@ async function fetchJSON(url) {
   try {
     const r = await fetch(url);
     if (!r.ok) {
-      console.error(`API ${url} returned ${r.status}`);
+      console.error('API ' + url + ' returned ' + r.status);
       return null;
     }
     return await r.json();
   } catch(e) {
-    console.error(`Failed to fetch ${url}:`, e);
+    console.error('Failed to fetch ' + url + ':', e);
     return null;
   }
 }
@@ -412,29 +412,28 @@ async function refreshStatus() {
     return;
   }
 
-  badge.innerHTML = `<span class="status-dot ${d.status}"></span>${d.status}`;
-  info.textContent = `Round ${d.current_step} | ${d.last_round_tools || 0} tools`;
-  agentStatus.innerHTML = `<span class="status-dot ${d.status}"></span>${d.status}`;
+  badge.innerHTML = '<span class="status-dot ' + d.status + '"></span>' + d.status;
+  info.textContent = 'Round ' + d.current_step + ' | ' + (d.last_round_tools || 0) + ' tools';
+  agentStatus.innerHTML = '<span class="status-dot ' + d.status + '"></span>' + d.status;
   
   // Update config panel
-  configPanel.innerHTML = `
-    <div class="config-item">
-      <span class="config-label">Model</span>
-      <span class="config-value">${escapeHtml(d.model || 'N/A')}</span>
-    </div>
-    <div class="config-item">
-      <span class="config-label">Interval</span>
-      <span class="config-value">${d.interval || 0}s</span>
-    </div>
-    <div class="config-item">
-      <span class="config-label">Current Round</span>
-      <span class="config-value">${d.current_step || 0}</span>
-    </div>
-    <div class="config-item">
-      <span class="config-label">Last Tools</span>
-      <span class="config-value">${d.last_round_tools || 0}</span>
-    </div>
-  `;
+  configPanel.innerHTML = 
+    '<div class="config-item">' +
+      '<span class="config-label">Model</span>' +
+      '<span class="config-value">' + escapeHtml(d.model || 'N/A') + '</span>' +
+    '</div>' +
+    '<div class="config-item">' +
+      '<span class="config-label">Interval</span>' +
+      '<span class="config-value">' + (d.interval || 0) + 's</span>' +
+    '</div>' +
+    '<div class="config-item">' +
+      '<span class="config-label">Current Round</span>' +
+      '<span class="config-value">' + (d.current_step || 0) + '</span>' +
+    '</div>' +
+    '<div class="config-item">' +
+      '<span class="config-label">Last Tools</span>' +
+      '<span class="config-value">' + (d.last_round_tools || 0) + '</span>' +
+    '</div>';
 }
 
 async function refreshNotebook() {
@@ -447,74 +446,94 @@ async function refreshNotebook() {
   }
   
   const scrollAtBottom = panel.scrollHeight - panel.scrollTop <= panel.clientHeight + 50;
-  panel.innerHTML = `<div class="notebook-content">${escapeHtml(d.content)}</div>`;
+  panel.innerHTML = '<div class="notebook-content">' + escapeHtml(d.content) + '</div>';
   
   if (scrollAtBottom) {
     panel.scrollTop = panel.scrollHeight;
   }
 }
 
+// Strip timestamp prefix like [HH:MM:SS] and tag like [REASONING]
+function stripPrefix(line, tag) {
+  var idx = line.indexOf(tag);
+  if (idx === -1) return line;
+  return line.substring(idx + tag.length).trim();
+}
+
 // Parse log lines into timeline items (chronological order)
 function parseLogTimeline(lines) {
-  const rounds = [];
-  let current = null;
-  let items = [];
-  let currentTool = null;
-  let inResult = false;
+  var rounds = [];
+  var current = null;
+  var items = [];
+  var currentTool = null;
+  var currentText = null;
+  var inResult = false;
+  var inText = false;
 
-  for (const line of lines) {
-    if (line.match(/Round \d+/)) {
+  for (var li = 0; li < lines.length; li++) {
+    var line = lines[li];
+
+    if (line.indexOf('Round ') !== -1 && line.indexOf('|') !== -1) {
       if (current) {
         current.items = items;
         rounds.push(current);
       }
-      current = { title: line, status: null };
+      current = { title: line, status: null, items: [] };
       items = [];
       currentTool = null;
+      currentText = null;
       inResult = false;
+      inText = false;
       continue;
     }
 
     if (!current) continue;
 
-    // Reasoning - add as text block
-    if (line.includes('[REASONING]')) {
-      const text = line.replace(/^\[\d+:\d+:\d+\]\s*\[REASONING\]\s*/, '');
-      items.push({ type: 'text', content: text });
+    if (line.indexOf('[REASONING]') !== -1) {
+      var text = stripPrefix(line, '[REASONING]');
+      currentText = { type: 'text', content: text };
+      items.push(currentText);
       inResult = false;
+      inText = true;
     }
-    // Agent output - add as text block
-    else if (line.includes('[AGENT]')) {
-      const text = line.replace(/^\[\d+:\d+:\d+\]\s*\[AGENT\]\s*/, '');
-      items.push({ type: 'text', content: text });
+    else if (line.indexOf('[AGENT]') !== -1) {
+      var text = stripPrefix(line, '[AGENT]');
+      currentText = { type: 'text', content: text };
+      items.push(currentText);
       inResult = false;
+      inText = true;
     }
-    // Tool call - start collecting
-    else if (line.includes('[TOOL]')) {
-      const call = line.replace(/^\[\d+:\d+:\d+\]\s*\[TOOL\]\s*/, '');
+    else if (line.indexOf('[TOOL]') !== -1 && line.indexOf('[RESULT]') === -1) {
+      var call = stripPrefix(line, '[TOOL]');
       currentTool = { type: 'tool', call: call, result: [] };
       items.push(currentTool);
       inResult = false;
+      inText = false;
+      currentText = null;
     }
-    // Tool result
-    else if (line.includes('[RESULT]')) {
+    else if (line.indexOf('[RESULT]') !== -1) {
       if (currentTool) {
-        const text = line.replace(/^\[\d+:\d+:\d+\]\s*\[RESULT\]\s*/, '');
+        var text = stripPrefix(line, '[RESULT]');
         currentTool.result.push(text);
         inResult = true;
+        inText = false;
+        currentText = null;
       }
     }
-    // Result continuation
-    else if (inResult && currentTool && line.match(/^\s{5,}/)) {
+    else if (inResult && currentTool && line.length > 5 && line.substring(0, 5).trim() === '') {
       currentTool.result.push(line.trim());
     }
-    // Status
-    else if (line.includes('[DONE]') || line.includes('[LIMIT]') || line.includes('[limit]')) {
+    else if (inText && currentText && line.length > 5 && line.substring(0, 5).trim() === '') {
+      currentText.content += ' ' + line.trim();
+    }
+    else if (line.indexOf('[DONE]') !== -1 || line.indexOf('[LIMIT]') !== -1 || line.indexOf('[limit]') !== -1) {
       current.status = line;
       inResult = false;
+      inText = false;
     }
     else {
       inResult = false;
+      inText = false;
     }
   }
 
@@ -526,45 +545,38 @@ function parseLogTimeline(lines) {
 }
 
 function renderRound(round, index) {
-  let html = `<div class="log-round">`;
-  html += `<div class="round-title">${escapeHtml(round.title)}</div>`;
-  
-  // Render items in chronological order
-  round.items.forEach((item, i) => {
+  var html = '<div class="log-round">';
+  html += '<div class="round-title">' + escapeHtml(round.title) + '</div>';
+  round.items.forEach(function(item, i) {
     if (item.type === 'text') {
-      // Text (reasoning or output) - fully visible, white text
-      html += `<div class="text-block">${escapeHtml(item.content)}</div>`;
+      html += '<div class="text-block">' + escapeHtml(item.content) + '</div>';
     } else if (item.type === 'tool') {
-      // Tool - collapsible
-      const toolId = `tool-${index}-${i}`;
-      const preview = item.call.length > 60 ? item.call.substring(0, 60) + '...' : item.call;
-      html += `<div class="tool-block">
-        <div class="tool-toggle" onclick="toggleTool('${toolId}')">
-          <span>🔧 ${escapeHtml(preview)}</span>
-          <span class="toggle-arrow" id="${toolId}-arrow">▶</span>
-        </div>
-        <div class="tool-content collapsed" id="${toolId}">
-          <div class="tool-call-full">${escapeHtml(item.call)}</div>
-          <div class="tool-result-text">${escapeHtml(item.result.join(' '))}</div>
-        </div>
-      </div>`;
+      var toolId = 'tool_' + index + '_' + i;
+      var preview = item.call.length > 60 ? item.call.substring(0, 60) + '...' : item.call;
+      html += '<div class="tool-block">';
+      html += '<div class="tool-toggle" onclick="toggleTool(this)">';
+      html += '<span>' + escapeHtml(preview) + '</span>';
+      html += '<span class="toggle-arrow">+</span>';
+      html += '</div>';
+      html += '<div class="tool-content collapsed">';
+      html += '<div class="tool-call-full">' + escapeHtml(item.call) + '</div>';
+      html += '<div class="tool-result-text">' + escapeHtml(item.result.join(' ')) + '</div>';
+      html += '</div>';
+      html += '</div>';
     }
   });
-  
-  // Status
   if (round.status) {
-    html += `<div class="round-status">${escapeHtml(round.status)}</div>`;
+    html += '<div class="round-status">' + escapeHtml(round.status) + '</div>';
   }
-  
-  html += `</div>`;
+  html += '</div>';
   return html;
 }
 
-function toggleTool(id) {
-  const content = document.getElementById(id);
-  const arrow = document.getElementById(id + '-arrow');
+function toggleTool(el) {
+  var content = el.parentElement.querySelector('.tool-content');
+  var arrow = el.querySelector('.toggle-arrow');
   content.classList.toggle('collapsed');
-  arrow.textContent = content.classList.contains('collapsed') ? '▶' : '▼';
+  arrow.textContent = content.classList.contains('collapsed') ? '+' : '-';
 }
 
 
@@ -579,9 +591,29 @@ async function refreshLogs() {
   
   const scrollAtBottom = panel.scrollHeight - panel.scrollTop <= panel.clientHeight + 50;
   
-  const rounds = parseLogTimeline(d.lines || []);
-  if (rounds.length === 0) {
+  const lines = d.lines || [];
+  console.log('[Debug] Received ' + lines.length + ' log lines');
+  
+  if (lines.length === 0) {
     panel.innerHTML = '<div style="color:#666;">No activity yet...</div>';
+    return;
+  }
+  
+  const rounds = parseLogTimeline(lines);
+  console.log('[Debug] Parsed ' + rounds.length + ' rounds from ' + lines.length + ' lines');
+  
+  if (rounds.length === 0) {
+    // Show raw logs if parsing fails
+    const rawDiv = document.createElement('div');
+    rawDiv.innerHTML = '<div style="color:#ffa726;">解析失败，显示原始日志：</div>';
+    const pre = document.createElement('pre');
+    pre.style.fontSize = '11px';
+    pre.style.color = '#888';
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.textContent = lines.join(String.fromCharCode(10));
+    rawDiv.appendChild(pre);
+    panel.innerHTML = '';
+    panel.appendChild(rawDiv);
     return;
   }
   
