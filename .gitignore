@@ -2,25 +2,18 @@
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
 venv/
-env/
-ENV/
+.env
 
 # Logs
 logs/
 *.log
+*.jsonl
 
-# Agent data
-timeline.jsonl
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
+# Agent Data (ignore local test data)
+memory.json
+notebook.md
+inbox.txt
 
 # OS
 .DS_Store

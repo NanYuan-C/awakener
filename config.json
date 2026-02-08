@@ -1,6 +1,6 @@
 {
     "model": "deepseek/deepseek-reasoner",
-    "api_key": "sk-364f6921417a475788f85c3572d91068",
+    "api_key": "sk-your-api-key-here",
 
     "agent_home": "/home/agent",
     "notebook_file": "notebook.md",
