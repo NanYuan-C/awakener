@@ -191,10 +191,18 @@ def _is_path_forbidden(path: str, project_dir: str) -> bool:
         return True
 
 
+BLOCKED_PKILL_MSG = (
+    "[BLOCKED] Broad process-killing commands (pkill, killall) are not allowed. "
+    "They may accidentally terminate system processes. "
+    "Use 'kill <PID>' to stop a specific process instead. "
+    "Find the PID first with 'ps aux | grep <name>' or 'pgrep -f <name>'."
+)
+
+
 def _is_shell_command_forbidden(command: str, project_dir: str, activator_pid: int | None) -> str | None:
     """
-    Check if a shell command attempts to access the project directory
-    or kill the activator process.
+    Check if a shell command attempts to access the project directory,
+    kill the activator process, or use dangerous broad kill patterns.
 
     Returns an error message string if blocked, or None if allowed.
 
@@ -202,6 +210,8 @@ def _is_shell_command_forbidden(command: str, project_dir: str, activator_pid: i
         1. Command contains the project directory path (cd, cat, ls, rm, etc.)
         2. Command tries to kill the activator PID
         3. Command tries to kill parent processes indiscriminately
+        4. Command uses pkill/killall with broad patterns that could
+           accidentally terminate the awakener or other system processes
 
     Args:
         command:       The shell command string to check.
@@ -235,6 +245,31 @@ def _is_shell_command_forbidden(command: str, project_dir: str, activator_pid: i
     # Block "kill -9 -1" or similar mass-kill commands
     if re.search(r"\bkill\b.*-\d+\s+-1\b", command):
         return BLOCKED_KILL_MSG
+
+    # -------------------------------------------------------------------
+    # Block broad process-killing commands: pkill / killall
+    # -------------------------------------------------------------------
+    # These can accidentally kill the awakener server or other critical
+    # system processes. The agent ran 'pkill -f "python.*app.py"' which
+    # killed the awakener because it also matched its process signature.
+    #
+    # Strategy: Block ALL pkill and killall usage. The agent should use
+    # 'kill <PID>' to target specific processes instead. This is safer
+    # because it requires the agent to identify the exact PID first.
+    # -------------------------------------------------------------------
+
+    # Split on shell operators to check each sub-command independently
+    # Handles: cmd1 && cmd2, cmd1 || cmd2, cmd1 ; cmd2, cmd1 | cmd2
+    sub_commands = re.split(r'[;&|]+', command)
+
+    for sub in sub_commands:
+        stripped = sub.strip()
+        # Check if the sub-command starts with or contains pkill/killall
+        # as the actual program being invoked
+        if re.search(r'\bpkill\b', stripped):
+            return BLOCKED_PKILL_MSG
+        if re.search(r'\bkillall\b', stripped):
+            return BLOCKED_PKILL_MSG
 
     return None
 
