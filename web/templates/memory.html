@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}Memory - Awakener{% endblock %}
+{% block page_title %}Agent Memory{% endblock %}
+
+{% block content %}
+<!--
+  Memory Page
+  ===========
+  View and inspect the agent's subjective memory (notebook).
+    - Read-only viewer showing the agent's notebook.md content
+    - Refreshable on demand
+    - Shows last-modified timestamp
+-->
+
+<!-- ====================================================================== -->
+<!-- Memory viewer                                                          -->
+<!-- ====================================================================== -->
+<div class="memory-viewer">
+  <div class="memory-viewer-header">
+    <div>
+      <strong data-i18n="memory.title">Agent Notebook</strong>
+      <span class="text-sm text-muted ml-sm" id="memory-meta"></span>
+    </div>
+    <div class="flex gap-sm">
+      <button class="btn btn-sm btn-outline" onclick="loadMemory()">
+        &#x1F504; <span data-i18n="memory.refresh">Refresh</span>
+      </button>
+    </div>
+  </div>
+  <div class="memory-viewer-body" id="memory-body">
+    <span class="text-muted" data-i18n="memory.loading">Loading memory...</span>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- Recent memories (rolling context window)                               -->
+<!-- ====================================================================== -->
+<div class="card mt-lg">
+  <div class="card-header">
+    <h3 data-i18n="memory.recentTitle">Recent Round Summaries</h3>
+    <button class="btn btn-sm btn-outline" onclick="loadRecentMemories()">
+      &#x1F504; <span data-i18n="memory.refresh">Refresh</span>
+    </button>
+  </div>
+  <div id="recent-memories">
+    <div class="empty-state">
+      <div class="empty-state-icon">&#x1F4DD;</div>
+      <p data-i18n="memory.noRecent">No recent round summaries yet.</p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/js/memory.js"></script>
+{% endblock %}

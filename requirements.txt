@@ -1,3 +1,21 @@
-litellm>=1.30.0
-fastapi>=0.110.0
-uvicorn>=0.29.0
+# =============================================================================
+# Awakener - Python Dependencies
+# =============================================================================
+# Install: pip install -r requirements.txt
+# =============================================================================
+
+# -- Web Framework -------------------------------------------------------------
+fastapi>=0.110.0          # Async web framework for the management console
+uvicorn[standard]>=0.29.0 # ASGI server to run FastAPI
+jinja2>=3.1.0             # HTML template engine (base layout inheritance)
+
+# -- Configuration -------------------------------------------------------------
+pyyaml>=6.0               # YAML config file parsing
+python-dotenv>=1.0.0      # Load .env files for API keys
+
+# -- Authentication ------------------------------------------------------------
+bcrypt>=4.0.0             # Password hashing
+python-jose[cryptography]>=3.3.0  # JWT token generation & validation
+
+# -- LLM Integration ----------------------------------------------------------
+litellm>=1.30.0           # Unified LLM API (OpenAI, DeepSeek, Anthropic, etc.)

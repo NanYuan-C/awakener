@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Awakener{% endblock %}</title>
+  <link rel="stylesheet" href="/css/app.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <div class="layout" id="app">
+
+    <!-- ================================================================== -->
+    <!-- Sidebar: Collapsible navigation panel                              -->
+    <!-- ================================================================== -->
+    <aside class="sidebar" id="sidebar">
+      <!-- Brand -->
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-icon">&#x1F9E0;</div>
+        <span class="sidebar-brand-text">Awakener</span>
+      </div>
+
+      <!-- Navigation links -->
+      <nav class="sidebar-nav">
+        <div class="sidebar-section" data-i18n="nav.main">Main</div>
+        <a href="/dashboard" data-page="dashboard">
+          <span class="nav-icon">&#x1F3E0;</span>
+          <span class="nav-label" data-i18n="nav.dashboard">Dashboard</span>
+        </a>
+        <a href="/timeline" data-page="timeline">
+          <span class="nav-icon">&#x1F4C5;</span>
+          <span class="nav-label" data-i18n="nav.timeline">Timeline</span>
+        </a>
+        <a href="/memory" data-page="memory">
+          <span class="nav-icon">&#x1F4DD;</span>
+          <span class="nav-label" data-i18n="nav.memory">Memory</span>
+        </a>
+
+        <div class="sidebar-section" data-i18n="nav.config">Configuration</div>
+        <a href="/prompts" data-page="prompts">
+          <span class="nav-icon">&#x1F3AD;</span>
+          <span class="nav-label" data-i18n="nav.prompts">Personas</span>
+        </a>
+        <a href="/settings" data-page="settings">
+          <span class="nav-icon">&#x2699;</span>
+          <span class="nav-label" data-i18n="nav.settings">Settings</span>
+        </a>
+      </nav>
+
+      <!-- Footer -->
+      <div class="sidebar-footer">
+        <a href="#" onclick="api.logout(); return false;">
+          <span class="nav-icon">&#x1F6AA;</span>
+          <span class="nav-label" data-i18n="nav.logout">Logout</span>
+        </a>
+      </div>
+    </aside>
+
+    <!-- ================================================================== -->
+    <!-- Main area: Top bar + Content                                       -->
+    <!-- ================================================================== -->
+    <div class="layout-main" id="layout-main">
+
+      <!-- Top bar -->
+      <header class="topbar">
+        <button class="topbar-toggle" id="sidebar-toggle" title="Toggle sidebar">&#x2630;</button>
+        <span class="topbar-title">{% block page_title %}Dashboard{% endblock %}</span>
+
+        <div class="topbar-actions">
+          <!-- Agent status badge (updated via JS) -->
+          <span class="agent-status stopped" id="agent-status">
+            <span class="status-dot"></span>
+            <span id="agent-status-text">Stopped</span>
+          </span>
+          <!-- Language toggle -->
+          <button class="lang-switch" id="lang-toggle" title="Switch language">EN</button>
+        </div>
+      </header>
+
+      <!-- Page content -->
+      <main class="layout-content">
+        {% block content %}{% endblock %}
+      </main>
+
+    </div>
+  </div>
+
+  <!-- Toast notification container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- ====================================================================
+       Shared scripts
+       ==================================================================== -->
+  <script src="/js/i18n.js"></script>
+  <script src="/js/api.js"></script>
+  <script>
+    // -------------------------------------------------------------------- //
+    // Sidebar toggle                                                        //
+    // -------------------------------------------------------------------- //
+    (function() {
+      const sidebar = document.getElementById('sidebar');
+      const toggle  = document.getElementById('sidebar-toggle');
+      const main    = document.getElementById('layout-main');
+
+      // Restore sidebar state from localStorage
+      if (localStorage.getItem('sidebar_collapsed') === 'true') {
+        sidebar.classList.add('collapsed');
+      }
+
+      toggle.addEventListener('click', function() {
+        sidebar.classList.toggle('collapsed');
+        // On mobile: toggle 'open' class instead
+        if (window.innerWidth <= 768) {
+          sidebar.classList.toggle('open');
+        }
+        localStorage.setItem('sidebar_collapsed', sidebar.classList.contains('collapsed'));
+      });
+
+      // Update the layout-main margin when sidebar state changes
+      const observer = new MutationObserver(function() {
+        if (sidebar.classList.contains('collapsed')) {
+          main.style.marginLeft = 'var(--sidebar-collapsed)';
+        } else {
+          main.style.marginLeft = 'var(--sidebar-width)';
+        }
+      });
+      observer.observe(sidebar, { attributes: true, attributeFilter: ['class'] });
+
+      // Initial margin
+      if (sidebar.classList.contains('collapsed')) {
+        main.style.marginLeft = 'var(--sidebar-collapsed)';
+      }
+    })();
+
+    // -------------------------------------------------------------------- //
+    // Active nav link highlight                                              //
+    // -------------------------------------------------------------------- //
+    (function() {
+      const currentPage = '{{ page_id|default("dashboard") }}';
+      const links = document.querySelectorAll('.sidebar-nav a[data-page]');
+      links.forEach(function(link) {
+        if (link.getAttribute('data-page') === currentPage) {
+          link.classList.add('active');
+        }
+      });
+    })();
+
+    // -------------------------------------------------------------------- //
+    // Language toggle                                                        //
+    // -------------------------------------------------------------------- //
+    (function() {
+      const btn = document.getElementById('lang-toggle');
+      if (typeof i18n !== 'undefined') {
+        btn.textContent = i18n.getLocale() === 'zh' ? '中文' : 'EN';
+        btn.addEventListener('click', function() {
+          const next = i18n.getLocale() === 'en' ? 'zh' : 'en';
+          i18n.setLocale(next);
+          btn.textContent = next === 'zh' ? '中文' : 'EN';
+          i18n.apply();
+        });
+      }
+    })();
+
+    // -------------------------------------------------------------------- //
+    // Toast helper (global)                                                  //
+    // -------------------------------------------------------------------- //
+    window.toast = function(message, type) {
+      type = type || 'info';
+      const container = document.getElementById('toast-container');
+      const el = document.createElement('div');
+      el.className = 'toast toast-' + type;
+      el.textContent = message;
+      container.appendChild(el);
+      setTimeout(function() {
+        el.style.opacity = '0';
+        el.style.transition = 'opacity 0.3s ease';
+        setTimeout(function() { el.remove(); }, 300);
+      }, 3000);
+    };
+
+    // -------------------------------------------------------------------- //
+    // Auth guard: redirect to login if not authenticated                     //
+    // -------------------------------------------------------------------- //
+    (async function() {
+      try {
+        const status = await fetch('/api/auth/status').then(r => r.json());
+        if (!status.is_configured) {
+          window.location.href = '/setup';
+          return;
+        }
+        if (!api.isAuthenticated()) {
+          window.location.href = '/login';
+          return;
+        }
+      } catch(e) {
+        // API unreachable, stay on page
+      }
+    })();
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,333 +1,311 @@
 """
-Awakener - Agent Core
-LLM calls via LiteLLM, context assembly, tool dispatch loop.
+Awakener - Agent Core (Single Round)
+=======================================
+Runs one activation round: calls the LLM via LiteLLM, dispatches tool
+calls, enforces the tool budget, and ensures the agent writes a notebook
+entry before the round ends.
+
+The round lifecycle:
+    1. Build system + user messages (done by caller)
+    2. Enter the tool-calling loop
+    3. LLM returns tool_calls -> execute them -> feed results back
+    4. Repeat until LLM stops calling tools or budget exhausted
+    5. Extract round summary for timeline
+
+Budget enforcement:
+    - normal_limit: Max tool calls the agent can use freely
+    - After normal_limit: only notebook_write is allowed
+    - hard_limit (normal + 5): force stop even without notebook
+
+DeepSeek reasoner support:
+    - reasoning_content from the response is preserved in the
+      conversation history so the model doesn't lose its thinking chain.
 """
 
 import json
-import os
-from datetime import datetime
-
 import litellm
-from tools import TOOLS_SCHEMA, execute_tool
+from activator.tools import ToolExecutor, TOOLS_SCHEMA
 
 
-# ── Persona Loading ───────────────────────────────────────────────────────
+# =============================================================================
+# Round Result Data Class
+# =============================================================================
 
-def load_persona(project_dir: str) -> str:
-    """Load persona from persona.md alongside the project root."""
-    persona_path = os.path.join(project_dir, "persona.md")
-    try:
-        with open(persona_path, "r", encoding="utf-8") as f:
-            return f.read()
-    except FileNotFoundError:
-        return "你是一个自主运行的AI Agent，拥有一台Linux服务器。"
-
-
-# ── Notebook Loading ──────────────────────────────────────────────────────
-
-def load_notebook(config: dict) -> str:
-    """Load the agent's notebook. Returns content or empty message."""
-    notebook_path = os.path.join(
-        config["agent_home"],
-        config.get("notebook_file", "notebook.md")
-    )
-    try:
-        with open(notebook_path, "r", encoding="utf-8") as f:
-            content = f.read().strip()
-        return content if content else "(空白笔记本)"
-    except FileNotFoundError:
-        return "(空白笔记本)"
-
-
-# ── Context Assembly ──────────────────────────────────────────────────────
-
-def build_system_message(persona: str) -> str:
-    """Build the system message: persona + tool hints + notebook rules."""
-    return f"""{persona}
-
----
-
-你有以下工具可以使用：
-- shell_execute(command) — 执行Shell命令，返回stdout和stderr
-- read_file(path) — 读取文件内容
-- write_file(path, content, append?) — 写入文件，append=true时追加
-
-你的笔记本路径：{{notebook_path}}
-它的内容每次醒来会自动呈现给你。
-你可以用 write_file 随时更新它。
-如果你失去记忆，笔记本是你唯一的线索。"""
-
-
-def build_user_message(
-    step: int,
-    notebook_content: str,
-    recent_memories: list[dict],
-    notebook_path: str,
-) -> str:
-    """Build the user message: time + notebook + recent memories."""
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    parts = []
-
-    parts.append(f"当前时间：{now}")
-    parts.append(f"第 {step} 轮激活")
-    parts.append("")
-
-    # Notebook
-    parts.append("## 你的笔记本")
-    parts.append(notebook_content)
-    parts.append("")
-
-    # Recent memories (rolling window of past rounds' outputs)
-    if recent_memories:
-        parts.append("## 近期记忆片段")
-        for mem in recent_memories:
-            parts.append(f"--- 第 {mem['step']} 轮 | {mem['time']} ---")
-            parts.append(mem["content"])
-            parts.append("")
-
-    parts.append("你醒来了。")
-
-    # Replace notebook path placeholder in system prompt won't work here,
-    # but we include it in the user message context for clarity
-    return "\n".join(parts)
-
-
-# ── Extract Round Summary ─────────────────────────────────────────────────
-
-def extract_round_summary(messages: list[dict], max_chars: int = 500) -> str:
+class RoundResult:
     """
-    Extract complete agent context from this round (reasoning + content).
-    
-    This creates a continuous context window similar to normal chat history.
-    Includes all reasoning_content and content from assistant messages,
-    but excludes tool calls and tool results.
+    Holds the outcome of a single activation round.
+
+    Attributes:
+        tools_used:     Total tool calls made this round.
+        notebook_saved: Whether the agent called notebook_write.
+        summary:        Text summary extracted from the agent's messages.
+        error:          Error message if the round failed, else None.
+    """
+
+    def __init__(
+        self,
+        tools_used: int = 0,
+        notebook_saved: bool = False,
+        summary: str = "",
+        error: str | None = None,
+    ):
+        self.tools_used = tools_used
+        self.notebook_saved = notebook_saved
+        self.summary = summary
+        self.error = error
+
+
+# =============================================================================
+# Summary Extraction
+# =============================================================================
+
+def _extract_summary(messages: list[dict], max_chars: int = 500) -> str:
+    """
+    Extract a brief summary from the agent's messages this round.
+
+    Collects reasoning_content and content from assistant messages,
+    skipping tool calls and tool results for brevity.
+
+    Args:
+        messages:  Full conversation history for this round.
+        max_chars: Maximum characters for the summary.
+
+    Returns:
+        A text summary of the agent's thoughts and outputs.
     """
     parts = []
-
     for msg in messages:
         if msg.get("role") == "assistant":
-            # Include reasoning (thinking process)
             if msg.get("reasoning_content"):
-                parts.append(f"[思考] {msg['reasoning_content']}")
-            
-            # Include formal output
+                parts.append(f"[Thinking] {msg['reasoning_content']}")
             if msg.get("content"):
-                parts.append(f"[输出] {msg['content']}")
+                parts.append(msg["content"])
 
-    full_text = "\n\n".join(parts).strip()
-
+    full_text = "\n".join(parts).strip()
     if not full_text:
-        full_text = "(本轮无文字输出)"
+        full_text = "(no text output this round)"
 
-    # Truncate if too long, but try to keep last part
     if len(full_text) > max_chars:
-        full_text = "..." + full_text[-(max_chars-3):]
+        full_text = full_text[:max_chars] + "..."
 
     return full_text
 
 
-# ── Main Activation Logic ─────────────────────────────────────────────────
+# =============================================================================
+# Budget Hint Messages
+# =============================================================================
 
-def run_activation(
-    config: dict,
-    project_dir: str,
-    step: int,
-    recent_memories: list[dict],
-    logger,
-) -> tuple[int, str]:
+def _budget_hint(used: int, normal_limit: int, notebook_written: bool) -> str:
     """
-    Run one activation round.
+    Generate a system hint about remaining tool budget.
+
+    These hints are prepended to tool results so the agent is aware
+    of how many calls it has left and whether it should save its notebook.
 
     Args:
-        config: Configuration dict
-        project_dir: Path to the awakener project root
-        step: Current activation step number
-        recent_memories: List of recent round summaries
-        logger: Logger instance
+        used:             Number of tools used so far.
+        normal_limit:     The normal budget limit.
+        notebook_written: Whether notebook_write has been called.
 
     Returns:
-        (tool_call_count, round_summary) tuple
+        A hint string to prepend to the tool result.
     """
-    # Load persona and notebook
-    persona = load_persona(project_dir)
-    notebook_content = load_notebook(config)
-    notebook_path = os.path.join(
-        config["agent_home"],
-        config.get("notebook_file", "notebook.md")
-    )
+    remaining = normal_limit - used
 
-    # Build messages
-    system_msg = build_system_message(persona).replace(
-        "{notebook_path}", notebook_path
-    )
-    user_msg = build_user_message(
-        step=step,
-        notebook_content=notebook_content,
-        recent_memories=recent_memories,
-        notebook_path=notebook_path,
-    )
+    if used >= normal_limit:
+        if notebook_written:
+            return (
+                f"[System: Tool budget exhausted ({used}/{normal_limit}). "
+                "Notebook saved. Please stop calling tools and let the round end.]"
+            )
+        else:
+            return (
+                f"[System: Tool budget exhausted ({used}/{normal_limit}). "
+                "Only notebook_write is allowed now. "
+                "Save your notes immediately!]"
+            )
 
-    messages = [
-        {"role": "system", "content": system_msg},
-        {"role": "user", "content": user_msg},
-    ]
+    if remaining <= 3:
+        save_hint = "" if notebook_written else " Remember to save your notebook!"
+        return (
+            f"[System: {used}/{normal_limit} tools used, "
+            f"only {remaining} left!{save_hint}]"
+        )
 
-    logger.info(f"[CONTEXT] Notebook: {len(notebook_content)} chars | "
-                f"Recent memories: {len(recent_memories)} rounds")
+    if remaining <= 8:
+        save_hint = "" if notebook_written else " Start wrapping up and save your notebook."
+        return (
+            f"[System: {used}/{normal_limit} tools used, "
+            f"{remaining} remaining.{save_hint}]"
+        )
 
-    # ── Tool calling loop ──
+    return f"[System: {used}/{normal_limit} tools used, {remaining} remaining]"
+
+
+# =============================================================================
+# Main Round Logic
+# =============================================================================
+
+def run_round(
+    messages: list[dict],
+    tool_executor: ToolExecutor,
+    model: str,
+    api_key: str | None = None,
+    normal_limit: int = 20,
+    logger=None,
+) -> RoundResult:
+    """
+    Execute one activation round: LLM <-> tool loop.
+
+    This function takes the pre-built messages (system + user) and runs
+    the tool-calling loop until the LLM stops, the budget is exhausted,
+    or an error occurs.
+
+    Args:
+        messages:       Initial messages list [system_msg, user_msg].
+        tool_executor:  ToolExecutor instance with safety checks.
+        model:          LiteLLM model identifier (e.g. "deepseek/deepseek-chat").
+        api_key:        Optional API key override.
+        normal_limit:   Normal tool budget per round.
+        logger:         Logger callback object (must have info, tool_call,
+                        tool_result, thought methods).
+
+    Returns:
+        RoundResult with tools_used, notebook_saved, summary, and error.
+    """
     total_tool_calls = 0
-    normal_limit = config.get("max_tool_calls_per_activation", 20)
-    hard_limit = normal_limit + 10  # Extra 10 calls for forced notebook writing
-    
-    notebook_path = os.path.join(config["agent_home"], config.get("notebook_file", "notebook.md"))
+    hard_limit = normal_limit + 5  # Extra buffer for forced notebook write
 
     while total_tool_calls < hard_limit:
-        # Call LLM via LiteLLM
+        # -- Call LLM via LiteLLM --
         try:
             response = litellm.completion(
-                model=config["model"],
+                model=model,
                 messages=messages,
                 tools=TOOLS_SCHEMA,
                 tool_choice="auto",
-                api_key=config.get("api_key"),
+                api_key=api_key,
             )
         except Exception as e:
-            logger.error(f"LLM API call failed: {e}")
-            break
+            error_msg = f"LLM API error: {type(e).__name__}: {e}"
+            if logger:
+                logger.info(f"[ERROR] {error_msg}")
+            return RoundResult(
+                tools_used=total_tool_calls,
+                notebook_saved=tool_executor.notebook_written,
+                summary=_extract_summary(messages),
+                error=error_msg,
+            )
 
         message = response.choices[0].message
-
-        # Log reasoning (for thinking models)
         reasoning = getattr(message, "reasoning_content", None)
-        if reasoning:
-            logger.info(f"[REASONING] {reasoning[:500]}{'...' if len(reasoning) > 500 else ''}")
 
-        # Log agent's output
-        if message.content:
+        # Log reasoning (for thinking models like DeepSeek Reasoner)
+        if reasoning and logger:
+            preview = reasoning[:500] + ("..." if len(reasoning) > 500 else "")
+            logger.info(f"[REASONING] {preview}")
+
+        # Log the agent's text output
+        if message.content and logger:
             logger.thought(message.content)
 
-        # If no tool calls, round is complete
+        # -- No tool calls: round ends naturally --
         if not message.tool_calls:
-            final_msg = {"role": "assistant", "content": message.content or ""}
+            assistant_msg = {"role": "assistant", "content": message.content or ""}
             if reasoning:
-                final_msg["reasoning_content"] = reasoning
-            messages.append(final_msg)
+                assistant_msg["reasoning_content"] = reasoning
+            messages.append(assistant_msg)
             break
 
-        # Build assistant message for conversation history
-        # DeepSeek reasoner requires reasoning_content in assistant messages
+        # -- Build assistant message with tool calls --
         assistant_msg = {"role": "assistant", "content": message.content or ""}
         if reasoning:
             assistant_msg["reasoning_content"] = reasoning
-        if message.tool_calls:
-            assistant_msg["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {
-                        "name": tc.function.name,
-                        "arguments": tc.function.arguments,
-                    },
-                }
-                for tc in message.tool_calls
-            ]
+        assistant_msg["tool_calls"] = [
+            {
+                "id": tc.id,
+                "type": "function",
+                "function": {
+                    "name": tc.function.name,
+                    "arguments": tc.function.arguments,
+                },
+            }
+            for tc in message.tool_calls
+        ]
         messages.append(assistant_msg)
 
-        # Execute each tool call
+        # -- Execute each tool call --
         for tool_call in message.tool_calls:
             func_name = tool_call.function.name
+            call_id = tool_call.id
 
             # Parse arguments
             try:
                 args = json.loads(tool_call.function.arguments)
             except json.JSONDecodeError:
-                logger.tool_call(func_name, {"_raw": tool_call.function.arguments})
-                result = "(error: failed to parse arguments as JSON)"
+                args = {}
+                if logger:
+                    logger.tool_call(func_name, {"_raw": tool_call.function.arguments})
+                result = "(error: failed to parse tool arguments as JSON)"
                 total_tool_calls += 1
-                
-                if total_tool_calls >= normal_limit:
-                    system_prefix = f"[System: ⚠️ 已到达工具使用上限。解析错误也计入次数。\n请使用 write_file 更新笔记本后停止。]\n\n"
-                else:
-                    remaining = normal_limit - total_tool_calls
-                    if remaining <= 3:
-                        system_prefix = f"[System: ⚠️ 本轮已用 {total_tool_calls} 次工具，仅剩 {remaining} 次！请尽快完成本轮任务并更新笔记本]\n\n"
-                    elif remaining <= 8:
-                        system_prefix = f"[System: 本轮已用 {total_tool_calls} 次工具，剩余 {remaining} 次。建议开始收尾]\n\n"
-                    else:
-                        system_prefix = f"[System: 本轮已用 {total_tool_calls} 次工具，剩余 {remaining} 次]\n\n"
-                
-                result_with_hint = system_prefix + result
-                logger.tool_result(result)
+                hint = _budget_hint(total_tool_calls, normal_limit, tool_executor.notebook_written)
                 messages.append({
                     "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": result_with_hint,
+                    "tool_call_id": call_id,
+                    "content": f"{hint}\n\n{result}",
                 })
+                if logger:
+                    logger.tool_result(result)
                 continue
 
-            logger.tool_call(func_name, args)
+            if logger:
+                logger.tool_call(func_name, args)
 
-            # Check if we've exceeded normal limit
+            # -- Budget enforcement --
             if total_tool_calls >= normal_limit:
-                # Force mode: only allow write_file to notebook
-                if func_name != "write_file":
-                    result = f"[System: ⚠️ 已到达工具使用上限 ({normal_limit}/{normal_limit})。\n现在只能使用 write_file 更新笔记本。\n请立即保存本轮记忆到 {notebook_path}，然后停止调用工具进入休眠。]"
+                # Over budget: only notebook_write allowed
+                if func_name != "notebook_write":
+                    if tool_executor.notebook_written:
+                        result = (
+                            f"[System: Tool budget exhausted ({total_tool_calls}/{normal_limit}). "
+                            "Notebook already saved. Please stop calling tools.]"
+                        )
+                    else:
+                        result = (
+                            f"[System: Tool budget exhausted ({total_tool_calls}/{normal_limit}). "
+                            "You must call notebook_write now to save your progress.]"
+                        )
                     total_tool_calls += 1
-                    logger.tool_result(result)
                     messages.append({
                         "role": "tool",
-                        "tool_call_id": tool_call.id,
+                        "tool_call_id": call_id,
                         "content": result,
                     })
-                    continue
-                
-                # Check if writing to notebook
-                target_path = os.path.abspath(args.get("path", ""))
-                expected_path = os.path.abspath(notebook_path)
-                if target_path != expected_path:
-                    result = f"[System: ⚠️ 已到达工具使用上限。\n请使用 write_file 更新笔记本 ({notebook_path})，\n而不是其他文件 ({target_path})。]"
-                    total_tool_calls += 1
-                    logger.tool_result(result)
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": result,
-                    })
+                    if logger:
+                        logger.tool_result(result)
                     continue
 
-            # Execute tool
-            result = execute_tool(func_name, args, config)
+            # -- Execute the tool --
+            result = tool_executor.execute(func_name, args)
             total_tool_calls += 1
-            
-            # Prepend system info: remaining tool calls
-            if total_tool_calls >= normal_limit:
-                system_prefix = f"[System: 笔记本已更新。本轮共使用 {total_tool_calls} 次工具。\n请停止调用工具，让本轮激活正常结束。]\n\n"
-            else:
-                remaining = normal_limit - total_tool_calls
-                if remaining <= 3:
-                    system_prefix = f"[System: ⚠️ 本轮已用 {total_tool_calls} 次工具，仅剩 {remaining} 次！请尽快完成本轮任务并更新笔记本]\n\n"
-                elif remaining <= 8:
-                    system_prefix = f"[System: 本轮已用 {total_tool_calls} 次工具，剩余 {remaining} 次。建议开始收尾]\n\n"
-                else:
-                    system_prefix = f"[System: 本轮已用 {total_tool_calls} 次工具，剩余 {remaining} 次]\n\n"
-            
-            result_with_hint = system_prefix + result
-            
-            logger.tool_result(result)
 
+            # Prepend budget hint
+            hint = _budget_hint(total_tool_calls, normal_limit, tool_executor.notebook_written)
             messages.append({
                 "role": "tool",
-                "tool_call_id": tool_call.id,
-                "content": result_with_hint,
+                "tool_call_id": call_id,
+                "content": f"{hint}\n\n{result}",
             })
 
+            if logger:
+                logger.tool_result(result)
 
-    if total_tool_calls >= hard_limit:
-        logger.info(f"[LIMIT] Reached hard limit ({hard_limit})")
+    # -- Round complete --
+    if total_tool_calls >= hard_limit and logger:
+        logger.info(f"[LIMIT] Reached hard limit ({hard_limit}) for this round")
 
-    # Extract this round's summary for the rolling memory window
-    max_chars = config.get("context_window", {}).get("max_chars_per_round", 500)
-    round_summary = extract_round_summary(messages, max_chars)
-
-    return total_tool_calls, round_summary
+    return RoundResult(
+        tools_used=total_tool_calls,
+        notebook_saved=tool_executor.notebook_written,
+        summary=_extract_summary(messages),
+    )

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Awakener</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <!--
+    Login Page (standalone - no sidebar/topbar)
+    Shown when the user has already set up a password and needs to log in.
+  -->
+  <div class="auth-page">
+    <div class="auth-card">
+
+      <div class="auth-card-header">
+        <h1>&#x1F9E0; Awakener</h1>
+        <p data-i18n="login.subtitle">Sign in to the management console</p>
+      </div>
+
+      <!-- Error message (hidden by default) -->
+      <div class="auth-error" id="login-error"></div>
+
+      <form id="login-form" onsubmit="return false;">
+        <div class="form-group">
+          <label for="password" data-i18n="login.password">Password</label>
+          <input
+            type="password"
+            id="password"
+            class="form-control"
+            placeholder="Enter your password"
+            autofocus
+            required
+          >
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg" id="login-btn">
+          <span data-i18n="login.submit">Sign In</span>
+        </button>
+      </form>
+
+    </div>
+  </div>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/api.js"></script>
+  <script>
+    /**
+     * Login page logic:
+     *   1. Check auth status on load - if already logged in, redirect to dashboard
+     *   2. If not configured (no password set), redirect to /setup
+     *   3. Submit password to /api/auth/login
+     *   4. On success, store JWT token and redirect to /dashboard
+     */
+
+    (async function init() {
+      // Apply i18n translations
+      if (typeof i18n !== 'undefined') i18n.apply();
+
+      // Check if already authenticated
+      if (api.isAuthenticated()) {
+        window.location.href = '/dashboard';
+        return;
+      }
+
+      // Check if setup is needed
+      try {
+        const status = await fetch('/api/auth/status').then(r => r.json());
+        if (!status.is_configured) {
+          window.location.href = '/setup';
+          return;
+        }
+      } catch (e) {
+        // API unreachable; show login form anyway
+      }
+    })();
+
+    // Handle form submission
+    document.getElementById('login-form').addEventListener('submit', async function() {
+      const password = document.getElementById('password').value;
+      const errorEl  = document.getElementById('login-error');
+      const btn      = document.getElementById('login-btn');
+
+      if (!password) return;
+
+      // Disable button during request
+      btn.disabled = true;
+      btn.textContent = '...';
+      errorEl.classList.remove('visible');
+
+      try {
+        const data = await api.post('/api/auth/login', { password: password });
+        api.setToken(data.token);
+        window.location.href = '/dashboard';
+      } catch (err) {
+        errorEl.textContent = err.message || 'Login failed';
+        errorEl.classList.add('visible');
+        btn.disabled = false;
+        btn.innerHTML = '<span data-i18n="login.submit">Sign In</span>';
+        if (typeof i18n !== 'undefined') i18n.apply();
+      }
+    });
+  </script>
+</body>
+</html>

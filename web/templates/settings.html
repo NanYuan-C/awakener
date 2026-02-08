@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Awakener{% endblock %}
+{% block page_title %}Settings{% endblock %}
+
+{% block content %}
+<!--
+  Settings Page
+  =============
+  Configuration management:
+    - Model selection (provider + model name)
+    - API key management (add / edit / remove keys)
+    - Agent parameters (interval, max tool calls, timeout)
+    - Password change
+-->
+
+<!-- ====================================================================== -->
+<!-- Model Configuration                                                    -->
+<!-- ====================================================================== -->
+<div class="settings-section">
+  <h2 data-i18n="settings.model">Model Configuration</h2>
+  <div class="card">
+    <div class="form-group">
+      <label for="model-provider" data-i18n="settings.provider">Provider</label>
+      <select id="model-provider" class="form-control">
+        <option value="deepseek">DeepSeek</option>
+        <option value="openai">OpenAI</option>
+        <option value="anthropic">Anthropic</option>
+        <option value="openrouter">OpenRouter</option>
+        <option value="custom">Custom (LiteLLM compatible)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="model-name" data-i18n="settings.modelName">Model Name</label>
+      <input type="text" id="model-name" class="form-control" placeholder="e.g. deepseek-chat">
+      <div class="hint" data-i18n="settings.modelHint">
+        The model identifier used by LiteLLM. Examples: deepseek-chat, gpt-4o, claude-sonnet-4-20250514
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="api-base" data-i18n="settings.apiBase">API Base URL (optional)</label>
+      <input type="text" id="api-base" class="form-control" placeholder="https://api.deepseek.com">
+      <div class="hint" data-i18n="settings.apiBaseHint">
+        Leave empty to use the provider's default endpoint
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="saveModelConfig()">
+      <span data-i18n="settings.save">Save</span>
+    </button>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- API Keys                                                               -->
+<!-- ====================================================================== -->
+<div class="settings-section">
+  <h2 data-i18n="settings.apiKeys">API Keys</h2>
+  <div class="card">
+    <p class="text-sm text-muted mb-md" data-i18n="settings.apiKeysHint">
+      API keys are stored in the .env file on your server. Values are masked for security.
+    </p>
+    <div id="api-keys-list">
+      <!-- Dynamically populated -->
+    </div>
+    <div class="mt-md flex gap-sm">
+      <input type="text" id="new-key-name" class="form-control" placeholder="KEY_NAME" style="max-width:200px;">
+      <input type="text" id="new-key-value" class="form-control" placeholder="sk-..." style="flex:1;">
+      <button class="btn btn-primary" onclick="addApiKey()">
+        <span data-i18n="settings.addKey">Add Key</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- Agent Parameters                                                       -->
+<!-- ====================================================================== -->
+<div class="settings-section">
+  <h2 data-i18n="settings.agentParams">Agent Parameters</h2>
+  <div class="card">
+    <div class="form-group">
+      <label for="interval" data-i18n="settings.interval">Activation Interval (seconds)</label>
+      <input type="number" id="interval" class="form-control" min="0" step="1" style="max-width:200px;">
+      <div class="hint" data-i18n="settings.intervalHint">
+        Seconds between rounds. Set to 0 for continuous execution (no delay).
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="max-tools" data-i18n="settings.maxTools">Max Tool Calls Per Round</label>
+      <input type="number" id="max-tools" class="form-control" min="1" step="1" style="max-width:200px;">
+    </div>
+    <div class="form-group">
+      <label for="tool-timeout" data-i18n="settings.toolTimeout">Tool Execution Timeout (seconds)</label>
+      <input type="number" id="tool-timeout" class="form-control" min="5" step="1" style="max-width:200px;">
+    </div>
+    <button class="btn btn-primary" onclick="saveAgentParams()">
+      <span data-i18n="settings.save">Save</span>
+    </button>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- Change Password                                                        -->
+<!-- ====================================================================== -->
+<div class="settings-section">
+  <h2 data-i18n="settings.security">Security</h2>
+  <div class="card">
+    <div class="form-group">
+      <label for="current-password" data-i18n="settings.currentPassword">Current Password</label>
+      <input type="password" id="current-password" class="form-control" style="max-width:400px;">
+    </div>
+    <div class="form-group">
+      <label for="new-password" data-i18n="settings.newPassword">New Password</label>
+      <input type="password" id="new-password" class="form-control" style="max-width:400px;">
+    </div>
+    <button class="btn btn-primary" onclick="changePassword()">
+      <span data-i18n="settings.changePassword">Change Password</span>
+    </button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/js/settings.js"></script>
+{% endblock %}

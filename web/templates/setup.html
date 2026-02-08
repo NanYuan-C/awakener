@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Setup - Awakener</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <!--
+    First-Time Setup Page (standalone - no sidebar/topbar)
+    Shown only once when no password has been configured yet.
+    The user sets an admin password, then is redirected to the dashboard.
+  -->
+  <div class="auth-page">
+    <div class="auth-card">
+
+      <div class="auth-card-header">
+        <h1>&#x1F9E0; Awakener</h1>
+        <p data-i18n="setup.subtitle">Welcome! Set your admin password to get started.</p>
+      </div>
+
+      <!-- Error message (hidden by default) -->
+      <div class="auth-error" id="setup-error"></div>
+
+      <form id="setup-form" onsubmit="return false;">
+        <div class="form-group">
+          <label for="new-password" data-i18n="setup.password">New Password</label>
+          <input
+            type="password"
+            id="new-password"
+            class="form-control"
+            placeholder="Choose a strong password"
+            autofocus
+            required
+            minlength="4"
+          >
+        </div>
+        <div class="form-group">
+          <label for="confirm-password" data-i18n="setup.confirm">Confirm Password</label>
+          <input
+            type="password"
+            id="confirm-password"
+            class="form-control"
+            placeholder="Enter the same password again"
+            required
+            minlength="4"
+          >
+        </div>
+        <button type="submit" class="btn btn-primary btn-lg" id="setup-btn">
+          <span data-i18n="setup.submit">Set Password & Start</span>
+        </button>
+      </form>
+
+    </div>
+  </div>
+
+  <script src="/js/i18n.js"></script>
+  <script src="/js/api.js"></script>
+  <script>
+    /**
+     * Setup page logic:
+     *   1. Check auth status - if already configured, redirect to /login
+     *   2. Validate password match
+     *   3. POST to /api/auth/setup to create the password
+     *   4. Store JWT token and redirect to /dashboard
+     */
+
+    (async function init() {
+      if (typeof i18n !== 'undefined') i18n.apply();
+
+      try {
+        const status = await fetch('/api/auth/status').then(r => r.json());
+        if (status.is_configured) {
+          window.location.href = '/login';
+          return;
+        }
+      } catch (e) {
+        // API unreachable
+      }
+    })();
+
+    document.getElementById('setup-form').addEventListener('submit', async function() {
+      const password = document.getElementById('new-password').value;
+      const confirm  = document.getElementById('confirm-password').value;
+      const errorEl  = document.getElementById('setup-error');
+      const btn      = document.getElementById('setup-btn');
+
+      errorEl.classList.remove('visible');
+
+      // Validate match
+      if (password !== confirm) {
+        errorEl.textContent = 'Passwords do not match';
+        errorEl.classList.add('visible');
+        return;
+      }
+
+      if (password.length < 4) {
+        errorEl.textContent = 'Password must be at least 4 characters';
+        errorEl.classList.add('visible');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = '...';
+
+      try {
+        const data = await api.post('/api/auth/setup', { password: password });
+        api.setToken(data.token);
+        window.location.href = '/dashboard';
+      } catch (err) {
+        errorEl.textContent = err.message || 'Setup failed';
+        errorEl.classList.add('visible');
+        btn.disabled = false;
+        btn.innerHTML = '<span data-i18n="setup.submit">Set Password & Start</span>';
+        if (typeof i18n !== 'undefined') i18n.apply();
+      }
+    });
+  </script>
+</body>
+</html>

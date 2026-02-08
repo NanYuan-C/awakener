@@ -1,0 +1,61 @@
+# =============================================================================
+# Awakener - Configuration File
+# =============================================================================
+# This file contains all non-sensitive configuration for the Awakener platform.
+# API keys and secrets should be placed in the .env file (never commit .env).
+#
+# After modifying this file, changes will take effect:
+#   - Web server settings: requires restart
+#   - Agent settings: applied on next activation round
+# =============================================================================
+
+# -- Web Server ---------------------------------------------------------------
+# The management console web server configuration.
+web:
+  # Port number for the web console (default: 8080)
+  port: 8080
+
+  # Host binding address
+  # Use "0.0.0.0" to allow external access, "127.0.0.1" for local only
+  host: "0.0.0.0"
+
+# -- Agent Settings -----------------------------------------------------------
+# Configuration for the autonomous agent activator.
+agent:
+
+  # Working directory on the server where the agent stores its files
+  # (memory, logs, notebooks, etc.)
+  home: "/home/agent"
+
+  # LLM model identifier in LiteLLM format: "provider/model-name"
+  # Examples:
+  #   - "deepseek/deepseek-chat"       (DeepSeek Chat, cost-effective)
+  #   - "deepseek/deepseek-reasoner"   (DeepSeek Reasoner, with thinking)
+  #   - "openai/gpt-4o"               (OpenAI GPT-4o)
+  #   - "anthropic/claude-sonnet-4-20250514"   (Anthropic Claude Sonnet)
+  model: "deepseek/deepseek-chat"
+
+  # Time in seconds between activation rounds.
+  # Set to 0 for continuous operation (no delay between rounds).
+  # Recommended: 60 for normal use, 0 for fast testing.
+  interval: 60
+
+  # Maximum number of tool calls allowed per activation round.
+  # Higher values let the agent do more per round but cost more tokens.
+  max_tool_calls: 20
+
+  # Timeout in seconds for shell command execution.
+  # Commands running longer than this will be killed.
+  shell_timeout: 30
+
+  # Maximum characters returned from tool output (read_file, shell_execute).
+  # Prevents context window overflow from large outputs.
+  max_output_chars: 4000
+
+  # Name of the persona file to use (from the prompts/ directory).
+  # Do not include the .md extension.
+  persona: "default"
+
+  # Number of recent notebook entries to inject into the agent's prompt.
+  # Higher values give the agent more context but use more tokens.
+  notebook_inject_count: 3
