@@ -119,7 +119,7 @@ class AgentManager:
         if "summary" in update:
             self.last_round_summary = update["summary"]
 
-    def _run_activator(self, config: dict) -> None:
+    def _run_activator(self, config: dict, event_loop) -> None:
         """
         Thread target: runs the activation loop.
 
@@ -127,7 +127,8 @@ class AgentManager:
         If the loop exits (normally or due to error), the state is reset.
 
         Args:
-            config: Full configuration dict from ConfigManager.load().
+            config:     Full configuration dict from ConfigManager.load().
+            event_loop: The main asyncio event loop for WS broadcasts.
         """
         try:
             from activator import run_activation_loop
@@ -138,10 +139,12 @@ class AgentManager:
                 stop_event=self._stop_event,
                 state_callback=self._state_callback,
                 project_dir=self.project_dir,
+                event_loop=event_loop,
             )
         except Exception as e:
             self.state = "error"
             self.last_round_summary = f"Fatal error: {e}"
+            print(f"[FATAL] Activator error: {e}", flush=True)
         finally:
             if self.state != "error":
                 self.state = "idle"
@@ -167,10 +170,14 @@ class AgentManager:
         self.start_time = datetime.now(timezone.utc).isoformat()
         self.total_rounds = 0
 
+        # Capture the current event loop for thread-safe WS broadcasts
+        import asyncio
+        event_loop = asyncio.get_running_loop()
+
         # Launch the activator in a daemon thread
         self._thread = threading.Thread(
             target=self._run_activator,
-            args=(config,),
+            args=(config, event_loop),
             daemon=True,
             name="awakener-activator",
         )

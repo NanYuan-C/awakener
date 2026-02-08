@@ -54,25 +54,20 @@ class ActivatorLogger:
         _loop:      asyncio event loop for WS broadcasts (may be None).
     """
 
-    def __init__(self, log_dir: str, ws_manager: Any = None):
+    def __init__(self, log_dir: str, ws_manager: Any = None, event_loop: asyncio.AbstractEventLoop | None = None):
         """
         Initialize the logger.
 
         Args:
             log_dir:    Directory path for log files.
             ws_manager: WebSocket manager instance (optional).
+            event_loop: The main asyncio event loop (for thread-safe WS broadcast).
         """
         self.log_dir = log_dir
         self.ws_manager = ws_manager
-        self._loop: asyncio.AbstractEventLoop | None = None
+        self._loop = event_loop
 
         os.makedirs(log_dir, exist_ok=True)
-
-        # Try to get the running event loop for WebSocket broadcasts
-        try:
-            self._loop = asyncio.get_event_loop()
-        except RuntimeError:
-            self._loop = None
 
     def _get_log_path(self) -> str:
         """Get today's log file path."""
@@ -125,6 +120,7 @@ class ActivatorLogger:
             f"{separator}"
         )
         self._write(header)
+        print(header, flush=True)
         self._broadcast("round", {"step": round_num, "event": "started"})
 
     def round_end(self, round_num: int, tools_used: int, duration: float, notebook_saved: bool) -> None:
@@ -145,6 +141,7 @@ class ActivatorLogger:
             f"Notebook: {note_status}"
         )
         self._write(text)
+        print(text, flush=True)
         self._broadcast("round", {
             "step": round_num,
             "event": "completed",
@@ -154,10 +151,11 @@ class ActivatorLogger:
         })
 
     def info(self, text: str) -> None:
-        """Log an informational message."""
+        """Log an informational message. Also prints to terminal."""
         ts = self._timestamp()
         line = f"[{ts}] {text}"
         self._write(line)
+        print(line, flush=True)
         self._broadcast("log", {"text": line})
 
     def thought(self, text: str) -> None:
@@ -178,6 +176,7 @@ class ActivatorLogger:
             args_str = args_str[:200] + "..."
         line = f"[{ts}] [TOOL] {name}({args_str})"
         self._write(line)
+        print(line, flush=True)
         self._broadcast("tool_call", {"name": name, "args": args})
 
     def tool_result(self, result: str) -> None:
@@ -186,6 +185,7 @@ class ActivatorLogger:
         preview = result[:500] + ("..." if len(result) > 500 else "")
         line = f"[{ts}] [RESULT] {preview}"
         self._write(line)
+        print(line, flush=True)
         self._broadcast("tool_result", {"text": result})
 
     def waiting(self, seconds: int) -> None:
@@ -193,6 +193,7 @@ class ActivatorLogger:
         ts = self._timestamp()
         line = f"[{ts}] [WAIT] Next activation in {seconds}s..."
         self._write(line)
+        print(line, flush=True)
         self._broadcast("status", {"status": "waiting", "next_in": seconds})
 
 
@@ -206,6 +207,7 @@ def run_activation_loop(
     stop_event: threading.Event | None = None,
     state_callback: Callable[[dict], None] | None = None,
     project_dir: str = "",
+    event_loop: asyncio.AbstractEventLoop | None = None,
 ) -> None:
     """
     Main activation loop. Runs in a background thread.
@@ -242,7 +244,7 @@ def run_activation_loop(
     log_dir = os.path.join(data_dir, "logs")
 
     memory = MemoryManager(data_dir)
-    logger = ActivatorLogger(log_dir, ws_manager)
+    logger = ActivatorLogger(log_dir, ws_manager, event_loop)
 
     # Ensure agent home directory exists
     os.makedirs(agent_home, exist_ok=True)

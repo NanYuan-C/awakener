@@ -106,10 +106,36 @@
         '<code class="text-sm" style="min-width:180px;">' + escapeHtml(name) + '</code>' +
         '<input type="text" class="form-control" value="' + escapeHtml(keys[name]) + '" ' +
         'data-key-name="' + escapeHtml(name) + '" placeholder="Enter new value to update">' +
+        '<button class="btn btn-sm btn-primary" onclick="saveApiKey(\'' + escapeHtml(name) + '\')">Save</button>' +
         '<button class="btn btn-sm btn-danger" onclick="deleteApiKey(\'' + escapeHtml(name) + '\')">Delete</button>';
       container.appendChild(row);
     });
   }
+
+  /**
+   * Save an existing API key with a new value.
+   * @param {string} name - The key name to save.
+   */
+  window.saveApiKey = async function(name) {
+    var input = document.querySelector('input[data-key-name="' + name + '"]');
+    if (!input) return;
+
+    var value = input.value.trim();
+    if (!value || value.includes('****')) {
+      toast('Enter a new key value to save (not the masked value)', 'warning');
+      return;
+    }
+
+    try {
+      var body = {};
+      body[name] = value;
+      await api.put('/api/config/keys', body);
+      toast('API key saved: ' + name, 'success');
+      await loadApiKeys();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
 
   /**
    * Add a new API key.
