@@ -2,104 +2,94 @@
 
 {% block title %}Dashboard - Awakener{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
-{% block head %}{% endblock %}
+{% block head %}
+<style>
+/* Dashboard-specific: make layout-content a non-scrolling flex container
+   so the log card can fill the entire remaining viewport height. */
+.layout-content {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+</style>
+{% endblock %}
 
 {% block content %}
 <!--
-  Dashboard Page
-  ==============
-  Main overview of the autonomous agent:
-    - Status statistics (round, status, tools used, uptime)
-    - Agent controls (start / stop / restart)
-    - Send inspiration to agent
-    - Real-time log panel (WebSocket streaming)
+  Dashboard Page — Fullscreen Log Layout
+  =======================================
+  Single card filling the viewport:
+    - Toolbar:  status badge + stats (left), control buttons (right)
+    - Log body: real-time WebSocket streaming (fills remaining height)
+    - Footer:   auto-scroll toggle + inspiration input
 -->
-
-<!-- ====================================================================== -->
-<!-- Stats cards row                                                        -->
-<!-- ====================================================================== -->
-<div class="stats-grid">
-  <div class="stat-card">
-    <div class="stat-icon purple">&#x1F504;</div>
-    <div class="stat-info">
-      <h4 data-i18n="dashboard.currentRound">CURRENT ROUND</h4>
-      <div class="stat-value" id="stat-round">0</div>
+<div class="log-card">
+  <!-- ================================================================== -->
+  <!-- Toolbar                                                             -->
+  <!-- ================================================================== -->
+  <div class="log-toolbar">
+    <div class="log-toolbar-left">
+      <span class="agent-status stopped" id="toolbar-status">
+        <span class="status-dot"></span>
+        <span id="stat-status">Stopped</span>
+      </span>
+      <span class="toolbar-sep"></span>
+      <span class="toolbar-stat">
+        <span class="toolbar-label" data-i18n="dashboard.round">Round</span>
+        <span class="toolbar-value" id="stat-round">0</span>
+      </span>
+      <span class="toolbar-sep"></span>
+      <span class="toolbar-stat">
+        <span class="toolbar-label" data-i18n="dashboard.tools">Tools</span>
+        <span class="toolbar-value" id="stat-tools">0</span>
+      </span>
+      <span class="toolbar-sep"></span>
+      <span class="toolbar-stat">
+        <span class="toolbar-label" data-i18n="dashboard.uptime">Uptime</span>
+        <span class="toolbar-value" id="stat-uptime">-</span>
+      </span>
     </div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-icon green">&#x26A1;</div>
-    <div class="stat-info">
-      <h4 data-i18n="dashboard.status">STATUS</h4>
-      <div class="stat-value" id="stat-status">Stopped</div>
-    </div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-icon yellow">&#x1F527;</div>
-    <div class="stat-info">
-      <h4 data-i18n="dashboard.toolCalls">TOOL CALLS</h4>
-      <div class="stat-value" id="stat-tools">0</div>
-    </div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-icon blue">&#x23F1;</div>
-    <div class="stat-info">
-      <h4 data-i18n="dashboard.uptime">UPTIME</h4>
-      <div class="stat-value" id="stat-uptime">-</div>
-    </div>
-  </div>
-</div>
-
-<!-- ====================================================================== -->
-<!-- Agent controls + Inspiration                                           -->
-<!-- ====================================================================== -->
-<div class="card mb-lg">
-  <div class="card-header">
-    <h3 data-i18n="dashboard.controls">Agent Controls</h3>
-  </div>
-  <div class="agent-controls mb-md">
-    <button class="btn btn-success" id="btn-start" onclick="agentAction('start')">
-      &#x25B6; <span data-i18n="dashboard.start">Start</span>
-    </button>
-    <button class="btn btn-danger" id="btn-stop" onclick="agentAction('stop')" disabled>
-      &#x23F9; <span data-i18n="dashboard.stop">Stop</span>
-    </button>
-    <button class="btn btn-warning" id="btn-restart" onclick="agentAction('restart')" disabled>
-      &#x1F504; <span data-i18n="dashboard.restart">Restart</span>
-    </button>
-  </div>
-  <div class="inbox-form">
-    <input
-      type="text"
-      class="form-control"
-      id="inspiration-input"
-      placeholder="Send an inspiration to the agent..."
-      data-i18n-placeholder="dashboard.inspirationPlaceholder"
-    >
-    <button class="btn btn-primary" onclick="sendInspiration()">
-      <span data-i18n="dashboard.send">Send</span>
-    </button>
-  </div>
-</div>
-
-<!-- ====================================================================== -->
-<!-- Live log panel                                                         -->
-<!-- ====================================================================== -->
-<div class="card">
-  <div class="card-header">
-    <h3 data-i18n="dashboard.liveLog">Live Log</h3>
-    <div class="flex gap-sm">
-      <button class="btn btn-sm btn-outline" onclick="clearLogs()">
-        <span data-i18n="dashboard.clear">Clear</span>
+    <div class="log-toolbar-right">
+      <button class="btn btn-sm btn-success" id="btn-start" onclick="agentAction('start')">
+        &#x25B6; <span data-i18n="dashboard.start">Start</span>
       </button>
-      <label class="flex flex-center gap-sm text-sm">
-        <input type="checkbox" id="auto-scroll" checked>
-        <span data-i18n="dashboard.autoScroll">Auto-scroll</span>
-      </label>
+      <button class="btn btn-sm btn-danger" id="btn-stop" onclick="agentAction('stop')" disabled>
+        &#x23F9; <span data-i18n="dashboard.stop">Stop</span>
+      </button>
+      <button class="btn btn-sm btn-warning" id="btn-restart" onclick="agentAction('restart')" disabled>
+        &#x1F504; <span data-i18n="dashboard.restart">Restart</span>
+      </button>
     </div>
   </div>
+
+  <!-- ================================================================== -->
+  <!-- Live log body                                                       -->
+  <!-- ================================================================== -->
   <div class="log-panel">
     <div class="log-panel-body" id="log-body">
       <div class="log-line log-system">Waiting for connection...</div>
+    </div>
+  </div>
+
+  <!-- ================================================================== -->
+  <!-- Footer: auto-scroll + inspiration                                   -->
+  <!-- ================================================================== -->
+  <div class="log-footer">
+    <label class="log-footer-autoscroll">
+      <input type="checkbox" id="auto-scroll" checked>
+      <span data-i18n="dashboard.autoScroll">Auto-scroll</span>
+    </label>
+    <div class="log-footer-inspiration">
+      <input
+        type="text"
+        class="form-control"
+        id="inspiration-input"
+        placeholder="Send an inspiration to the agent..."
+        data-i18n-placeholder="dashboard.inspirationPlaceholder"
+      >
+      <button class="btn btn-sm btn-primary" onclick="sendInspiration()">
+        <span data-i18n="dashboard.send">Send</span>
+      </button>
     </div>
   </div>
 </div>

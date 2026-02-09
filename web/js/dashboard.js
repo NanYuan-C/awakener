@@ -21,12 +21,13 @@
   const statStatus   = document.getElementById('stat-status');
   const statTools    = document.getElementById('stat-tools');
   const statUptime   = document.getElementById('stat-uptime');
-  const btnStart     = document.getElementById('btn-start');
-  const btnStop      = document.getElementById('btn-stop');
-  const btnRestart   = document.getElementById('btn-restart');
-  const statusBadge  = document.getElementById('agent-status');
-  const statusText   = document.getElementById('agent-status-text');
-  const statusDot    = statusBadge ? statusBadge.querySelector('.status-dot') : null;
+  const btnStart       = document.getElementById('btn-start');
+  const btnStop        = document.getElementById('btn-stop');
+  const btnRestart     = document.getElementById('btn-restart');
+  const statusBadge    = document.getElementById('agent-status');       // topbar badge
+  const statusText     = document.getElementById('agent-status-text');  // topbar text
+  const statusDot      = statusBadge ? statusBadge.querySelector('.status-dot') : null;
+  const toolbarStatus  = document.getElementById('toolbar-status');     // dashboard toolbar badge
 
   // -- State ----------------------------------------------------------------
   let ws = null;
@@ -53,6 +54,8 @@
 
     ws.onopen = function() {
       appendLog('Connected to agent stream', 'system');
+      // Fetch current status on every (re)connect to stay in sync
+      fetchStatus();
     };
 
     ws.onmessage = function(event) {
@@ -111,6 +114,8 @@
         if (d.event === 'started') {
           appendLog('═══ Round ' + d.step + ' ═══', 'round');
           statRound.textContent = d.step || '-';
+          // Belt-and-suspenders: also update status from round event
+          updateStatus({status: 'running', round: d.step});
         } else if (d.event === 'completed') {
           appendLog(
             '[DONE] Round ' + d.step + ' | Tools: ' + (d.tools_used || 0) +
@@ -210,9 +215,12 @@
     // Support both WS format (status) and REST format (state)
     const status = data.status || data.state || 'idle';
 
-    // Update badge
+    // Update topbar badge
     if (statusBadge) statusBadge.className = 'agent-status ' + status;
     if (statusText) statusText.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+
+    // Update toolbar badge (dashboard inline)
+    if (toolbarStatus) toolbarStatus.className = 'agent-status ' + status;
     statStatus.textContent = status.charAt(0).toUpperCase() + status.slice(1);
 
     // Show waiting info
@@ -220,9 +228,13 @@
       statStatus.textContent = 'Waiting (' + data.next_in + 's)';
     }
 
-    // Pulse animation for running
+    // Pulse animation for running (both topbar and toolbar dots)
     if (statusDot) {
       statusDot.classList.toggle('pulse', status === 'running');
+    }
+    if (toolbarStatus) {
+      var tbDot = toolbarStatus.querySelector('.status-dot');
+      if (tbDot) tbDot.classList.toggle('pulse', status === 'running');
     }
 
     // Update round (WS sends 'round', REST sends 'current_round' or 'current_step')
@@ -395,15 +407,6 @@
     }
   };
 
-  /**
-   * Clear the log panel.
-   */
-  window.clearLogs = function() {
-    logBody.innerHTML = '<div class="log-line log-system">Log cleared.</div>';
-    totalToolCalls = 0;
-    statTools.textContent = '0';
-  };
-
   // -- Handle Enter key in inspiration input ----------------------------------
   document.getElementById('inspiration-input').addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
@@ -414,16 +417,23 @@
   // -- Init -----------------------------------------------------------------
 
   /**
-   * Fetch initial agent status from REST API, then connect WebSocket.
+   * Fetch the current agent status from the REST API and update the UI.
+   * Called on init and on every WebSocket (re)connect to stay in sync.
    */
-  async function init() {
+  async function fetchStatus() {
     try {
       const status = await api.get('/api/agent/status');
       updateStatus(status);
     } catch (e) {
-      // API might not be ready yet
+      // API might not be ready yet – ignore silently
     }
+  }
 
+  /**
+   * Initialise the dashboard: load current status, then open WebSocket.
+   */
+  async function init() {
+    await fetchStatus();
     connectWS();
 
     // Apply i18n

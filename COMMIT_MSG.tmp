@@ -1,0 +1,14 @@
+Redesign dashboard: fullscreen log layout with reliable status updates
+
+- Fix unreliable status display: broadcast "running" status in
+  round_start() so the frontend updates when transitioning from
+  "waiting" to "running"; also update status from round events as
+  belt-and-suspenders; fetch status on every WebSocket reconnect.
+- Add .agent-status.waiting CSS class (was missing, caused unstyled badge).
+- Redesign dashboard to a single fullscreen log card:
+  - One-line toolbar: status badge + stats (left), control buttons (right)
+  - Log body fills remaining viewport height (no browser scrollbar)
+  - Dark footer: auto-scroll toggle + inspiration input
+- Remove stats-grid cards, controls card, and clear button.
+- Add toolbar status badge with synchronized color and pulse animation.
+- Add i18n keys for compact toolbar labels (round, tools).

@@ -362,6 +362,11 @@ code, pre {
   color: var(--color-danger);
 }
 
+.agent-status.waiting {
+  background: var(--color-info-light);
+  color: var(--color-info);
+}
+
 .agent-status.idle {
   background: var(--color-warning-light);
   color: var(--color-warning);
@@ -759,7 +764,6 @@ select.form-control {
 /* Loading indicator: ephemeral hint with animated dots */
 .log-line.log-loading {
   color: #9399b2;
-  font-style: italic;
 }
 
 
@@ -870,7 +874,7 @@ select.form-control {
   line-height: 1.2;
 }
 
-/* -- Agent controls ------------------------------------------------------- */
+/* -- Agent controls (legacy — kept for potential reuse) ------------------- */
 
 .agent-controls {
   display: flex;
@@ -878,7 +882,7 @@ select.form-control {
   flex-wrap: wrap;
 }
 
-/* -- Inspiration form (was: inbox form) ----------------------------------- */
+/* -- Inspiration form (legacy) -------------------------------------------- */
 
 .inbox-form {
   display: flex;
@@ -889,7 +893,138 @@ select.form-control {
   flex: 1;
 }
 
-/* (notebook-content class removed — replaced by memory-card-content) */
+/* -- Fullscreen Log Card -------------------------------------------------- */
+/* The log-card fills the entire layout-content area.  The dashboard template
+   overrides layout-content to be a non-scrolling flex container so that the
+   card can stretch to the bottom of the viewport. */
+
+.log-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;               /* allow flex child to shrink */
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+/* -- Toolbar (one-line header) -------------------------------------------- */
+
+.log-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+  gap: var(--spacing-md);
+  flex-shrink: 0;
+}
+
+.log-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.log-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex-shrink: 0;
+}
+
+.toolbar-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--color-border);
+  flex-shrink: 0;
+}
+
+.toolbar-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-sm);
+}
+
+.toolbar-label {
+  color: var(--color-text-light);
+}
+
+.toolbar-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* -- Log panel (fills remaining height) ----------------------------------- */
+
+.log-card .log-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: 0;
+}
+
+.log-card .log-panel-body {
+  flex: 1;
+  max-height: none;              /* override the default 500px limit */
+}
+
+/* -- Footer (auto-scroll + inspiration input) ----------------------------- */
+
+.log-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: #1e1e2e;          /* match log panel background */
+  border-top: 1px solid rgba(255,255,255,0.1);
+  flex-shrink: 0;
+}
+
+.log-footer-autoscroll {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  color: #9399b2;
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.log-footer-autoscroll input[type="checkbox"] {
+  accent-color: var(--color-primary);
+}
+
+.log-footer-inspiration {
+  display: flex;
+  flex: 1;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.log-footer-inspiration .form-control {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.15);
+  color: #cdd6f4;
+  font-size: var(--font-size-sm);
+}
+
+.log-footer-inspiration .form-control::placeholder {
+  color: #6c7086;
+}
+
+.log-footer-inspiration .form-control:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+}
 
 
 /* ==========================================================================
@@ -1189,6 +1324,19 @@ select.form-control {
   .modal {
     width: 95%;
     margin: var(--spacing-md);
+  }
+
+  /* Dashboard toolbar: allow wrapping on narrow screens */
+  .log-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .log-footer {
+    flex-wrap: wrap;
+  }
+
+  .log-footer-inspiration {
+    flex: 1 1 100%;
   }
 }
 

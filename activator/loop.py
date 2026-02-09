@@ -120,6 +120,10 @@ class ActivatorLogger:
         """
         Log the start of a new round with a separator header.
 
+        Broadcasts both a status update ("running") and a round event.
+        The status broadcast ensures the frontend badge/buttons update
+        correctly when transitioning from "waiting" to "running".
+
         Args:
             round_num: The round number starting.
         """
@@ -132,6 +136,7 @@ class ActivatorLogger:
         )
         self._write(header)
         print(header, flush=True)
+        self._broadcast("status", {"status": "running", "round": round_num})
         self._broadcast("round", {"step": round_num, "event": "started"})
 
     def round_end(self, round_num: int, tools_used: int, duration: float, notebook_saved: bool) -> None:
