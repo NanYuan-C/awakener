@@ -413,6 +413,46 @@ def _is_shell_command_forbidden(
 # Tool Implementations
 # =============================================================================
 
+# Environment variable patterns to strip from the agent's shell.
+# Any env var whose name matches one of these patterns is removed
+# before the subprocess runs.  This prevents the agent from reading
+# the awakener's API keys, auth secrets, or internal config.
+_SENSITIVE_ENV_PATTERNS = [
+    r'.*API_KEY.*',
+    r'.*SECRET.*',
+    r'.*PASSWORD.*',
+    r'.*TOKEN.*',
+    r'^AWAKENER_.*',      # Any awakener-internal vars
+    r'^INVOCATION_ID$',   # systemd — reveals we're a service
+    r'^TMUX$',            # Reveals the tmux session socket
+    r'^STY$',             # Reveals the screen session
+]
+
+_SENSITIVE_ENV_RE = re.compile(
+    '|'.join(_SENSITIVE_ENV_PATTERNS),
+    re.IGNORECASE,
+)
+
+
+def _make_clean_env() -> dict[str, str]:
+    """
+    Create a sanitised copy of the current environment for subprocess.
+
+    Removes all variables whose names match ``_SENSITIVE_ENV_PATTERNS``
+    so the agent's shell commands cannot see API keys, auth tokens, or
+    host-session indicators.  Everything else (PATH, HOME, LANG, etc.)
+    is preserved so normal commands work correctly.
+
+    Returns:
+        A dict suitable for ``subprocess.run(env=...)``.
+    """
+    return {
+        k: v
+        for k, v in os.environ.items()
+        if not _SENSITIVE_ENV_RE.match(k)
+    }
+
+
 def _shell_execute(
     command: str,
     agent_home: str,
@@ -429,6 +469,10 @@ def _shell_execute(
     - The command cannot reference the awakener project directory.
     - The command cannot kill the activator process.
     - The command cannot interact with the awakener's host session/service.
+
+    The subprocess runs with a **sanitised environment**: API keys,
+    auth tokens, and host-session variables are stripped so the agent
+    cannot read them via ``env``, ``printenv``, or ``echo $VAR``.
 
     Args:
         command:       Shell command string.
@@ -455,6 +499,7 @@ def _shell_execute(
             text=True,
             timeout=timeout,
             cwd=agent_home,
+            env=_make_clean_env(),
         )
         output = ""
         if result.stdout:
