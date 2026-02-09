@@ -10,11 +10,22 @@ Defines the 5 tools available to the autonomous agent:
     5. notebook_read  - Read ONE specific historical round's note
 
 Safety:
-    - The awakener project directory is a FORBIDDEN ZONE.
-      Any file operation or shell command that targets the project
-      directory will be blocked with an error message.
-    - The agent cannot kill its own activator process.
-    - All file paths are resolved to absolute paths before checking.
+    The agent must not be able to terminate the awakener system that
+    powers it.  Multiple layers of protection are applied:
+
+    1. Forbidden zone:  The awakener project directory is off-limits
+       for all file and shell operations.
+    2. PID protection:  ``kill <activator_pid>`` is blocked.
+    3. Broad kill ban:  ``pkill`` / ``killall`` are blocked entirely.
+    4. Host session:    The tmux / screen session running the server
+       is auto-detected at startup and protected (send-keys, kill, etc.).
+    5. Systemd service: If running as a systemd service, ``systemctl
+       stop/restart/kill`` for that service is blocked.
+    6. Kill combos:     ``kill $(pgrep ...)`` and similar patterns that
+       bypass the PID check via shell expansion are blocked.  The agent
+       can still use ``pgrep`` to find PIDs and ``kill <PID>`` to kill
+       specific processes — only the combination is restricted.
+    7. tmux kill-server / screen -X quit are always blocked.
 """
 
 import os
@@ -198,42 +209,142 @@ BLOCKED_PKILL_MSG = (
     "Find the PID first with 'ps aux | grep <name>' or 'pgrep -f <name>'."
 )
 
+BLOCKED_SESSION_MSG = (
+    "[BLOCKED] You cannot interact with the awakener's host session. "
+    "This session runs the awakener system that powers your activation. "
+    "Sending keys or killing this session would terminate yourself. "
+    "If you need to manage your own sessions, use a different name."
+)
 
-def _is_shell_command_forbidden(command: str, project_dir: str, activator_pid: int | None) -> str | None:
+BLOCKED_SYSTEMD_MSG = (
+    "[BLOCKED] You cannot stop, restart, or kill the awakener's "
+    "systemd service. This service powers your activation."
+)
+
+BLOCKED_KILL_COMBO_MSG = (
+    "[BLOCKED] Combining kill with dynamic PID lookup (pgrep, pidof) "
+    "is not allowed — it could accidentally terminate the awakener. "
+    "Use two separate steps instead: "
+    "1) find the PID: pgrep -f <name>  "
+    "2) kill it: kill <PID>"
+)
+
+
+# =============================================================================
+# Host Environment Detection
+# =============================================================================
+
+def detect_host_env() -> dict:
     """
-    Check if a shell command attempts to access the project directory,
-    kill the activator process, or use dangerous broad kill patterns.
+    Detect how the awakener server was launched so we can protect
+    the host session / service from agent interference.
 
-    Returns an error message string if blocked, or None if allowed.
+    Auto-detects three common deployment methods:
 
-    Checks performed:
-        1. Command contains the project directory path (cd, cat, ls, rm, etc.)
-        2. Command tries to kill the activator PID
-        3. Command tries to kill parent processes indiscriminately
-        4. Command uses pkill/killall with broad patterns that could
-           accidentally terminate the awakener or other system processes
+    - **tmux**:    Checks the ``TMUX`` env var, then queries the session name.
+    - **screen**:  Parses the ``STY`` env var (format ``<pid>.<name>``).
+    - **systemd**: Checks ``INVOCATION_ID`` env var and parses
+      ``/proc/self/cgroup`` for the ``.service`` unit name.
+
+    Returns:
+        Dict with up to three keys (absent if not detected)::
+
+            {
+                "tmux_session":    "awakener",
+                "screen_session":  "awakener",
+                "systemd_service": "awakener",
+            }
+    """
+    env: dict[str, str] = {}
+
+    # -- tmux --
+    if os.environ.get("TMUX"):
+        try:
+            result = subprocess.run(
+                ["tmux", "display-message", "-p", "#S"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                env["tmux_session"] = result.stdout.strip()
+        except Exception:
+            pass
+
+    # -- screen --
+    sty = os.environ.get("STY", "")
+    if sty:
+        # STY format: <pid>.<session_name>
+        parts = sty.split(".", 1)
+        if len(parts) == 2 and parts[1]:
+            env["screen_session"] = parts[1]
+
+    # -- systemd --
+    if os.environ.get("INVOCATION_ID"):
+        try:
+            with open("/proc/self/cgroup", "r") as f:
+                for line in f:
+                    if ".service" in line:
+                        for part in line.strip().split("/"):
+                            if part.endswith(".service"):
+                                env["systemd_service"] = part[: -len(".service")]
+                                break
+                        if "systemd_service" in env:
+                            break
+        except Exception:
+            pass
+
+    return env
+
+
+def _is_shell_command_forbidden(
+    command: str,
+    project_dir: str,
+    activator_pid: int | None,
+    host_env: dict | None = None,
+) -> str | None:
+    """
+    Check if a shell command would harm the awakener system.
+
+    The checks are designed to **only protect the awakener itself**.
+    The agent is free to manage its own processes and sessions;
+    only the specific host session/service/PID that runs the awakener
+    is restricted.
+
+    Checks (in order):
+        1. Project directory path — blocks file access to the forbidden zone.
+        2. Direct PID kill — blocks ``kill <activator_pid>``.
+        3. Mass kill — blocks ``kill -9 -1`` style nuke commands.
+        4. Host session — blocks tmux/screen commands targeting the
+           auto-detected session name, plus ``tmux kill-server``.
+        5. Systemd service — blocks ``systemctl stop/restart/kill``
+           for the auto-detected service unit.
+        6. Kill combos — blocks ``kill $(pgrep ...)`` and pipe variants
+           that bypass the PID check via shell expansion.
+        7. Broad kill — blocks ``pkill`` / ``killall`` entirely.
 
     Args:
         command:       The shell command string to check.
         project_dir:   The awakener project root (forbidden zone).
         activator_pid: PID of the current activator process.
+        host_env:      Dict from ``detect_host_env()`` with keys like
+                       ``tmux_session``, ``screen_session``,
+                       ``systemd_service`` (may be None or empty).
 
     Returns:
         Error message if the command is blocked, None if safe.
     """
-    # Normalize project dir for string matching
-    norm_dir = os.path.realpath(os.path.abspath(project_dir))
+    if host_env is None:
+        host_env = {}
 
-    # Check if command references the project directory
-    # We check both the normalized path and the original config path
-    paths_to_check = {norm_dir, project_dir}
-    for p in paths_to_check:
+    # ==== 1. Project directory ============================================
+    norm_dir = os.path.realpath(os.path.abspath(project_dir))
+    for p in {norm_dir, project_dir}:
         if p in command:
             return BLOCKED_MSG
 
-    # Check for process killing commands targeting our PID
+    # ==== 2. Direct PID kill ==============================================
     if activator_pid is not None:
-        # Patterns like: kill 12345, kill -9 12345, pkill -P 12345
         kill_patterns = [
             rf"\bkill\b.*\b{activator_pid}\b",
             rf"\bpkill\b.*-P\s*{activator_pid}\b",
@@ -242,30 +353,65 @@ def _is_shell_command_forbidden(command: str, project_dir: str, activator_pid: i
             if re.search(pattern, command):
                 return BLOCKED_KILL_MSG
 
-    # Block "kill -9 -1" or similar mass-kill commands
+    # ==== 3. Mass kill ====================================================
     if re.search(r"\bkill\b.*-\d+\s+-1\b", command):
         return BLOCKED_KILL_MSG
 
-    # -------------------------------------------------------------------
-    # Block broad process-killing commands: pkill / killall
-    # -------------------------------------------------------------------
-    # These can accidentally kill the awakener server or other critical
-    # system processes. The agent ran 'pkill -f "python.*app.py"' which
-    # killed the awakener because it also matched its process signature.
-    #
-    # Strategy: Block ALL pkill and killall usage. The agent should use
-    # 'kill <PID>' to target specific processes instead. This is safer
-    # because it requires the agent to identify the exact PID first.
-    # -------------------------------------------------------------------
+    # ==== 4. Host session protection (tmux / screen) ======================
+    # 4a. tmux kill-server — destroys ALL sessions, always block
+    if re.search(r'\btmux\s+kill-server\b', command):
+        return BLOCKED_SESSION_MSG
 
+    # 4b. tmux commands targeting our specific session
+    tmux_session = host_env.get("tmux_session")
+    if tmux_session:
+        escaped = re.escape(tmux_session)
+        # Matches: tmux <anything> -t mysession (with optional quotes / pane suffix)
+        if re.search(rf'\btmux\b.*\s-t\s*["\']?{escaped}\b', command):
+            return BLOCKED_SESSION_MSG
+
+    # 4c. screen commands targeting our specific session
+    screen_session = host_env.get("screen_session")
+    if screen_session:
+        escaped = re.escape(screen_session)
+        # screen -S <name> -X quit, screen -X -S <name> quit, etc.
+        if re.search(rf'\bscreen\b.*\s-S\s*["\']?{escaped}\b', command):
+            return BLOCKED_SESSION_MSG
+        # screen -r/-x to re-attach our session
+        if re.search(rf'\bscreen\b.*\s-[rx]\s*["\']?{escaped}\b', command):
+            return BLOCKED_SESSION_MSG
+
+    # ==== 5. Systemd service protection ===================================
+    systemd_service = host_env.get("systemd_service")
+    if systemd_service:
+        escaped = re.escape(systemd_service)
+        # systemctl stop/restart/kill <service>
+        if re.search(
+            rf'\bsystemctl\s+(stop|restart|kill|disable)\s+["\']?{escaped}\b',
+            command,
+        ):
+            return BLOCKED_SYSTEMD_MSG
+
+    # ==== 6. Kill + dynamic PID lookup (bypass prevention) ================
+    # The agent can still:
+    #   - pgrep -f myapp           (find PIDs — allowed)
+    #   - kill 12345               (kill specific PID — PID check protects us)
+    # But combining them in one command bypasses the PID check because
+    # the shell expands $(pgrep ...) AFTER our string-based check.
+    # So we block the combination patterns:
+
+    # kill $(pgrep/pidof ...) or kill `pgrep/pidof ...`
+    if re.search(r'\bkill\b.*(\$\(|`).*\b(pgrep|pidof)\b', command):
+        return BLOCKED_KILL_COMBO_MSG
+    # pgrep/pidof ... | xargs kill  or  pgrep/pidof ... | ... kill
+    if re.search(r'\b(pgrep|pidof)\b.*\|.*\bkill\b', command):
+        return BLOCKED_KILL_COMBO_MSG
+
+    # ==== 7. Broad kill commands (pkill / killall) ========================
     # Split on shell operators to check each sub-command independently
-    # Handles: cmd1 && cmd2, cmd1 || cmd2, cmd1 ; cmd2, cmd1 | cmd2
     sub_commands = re.split(r'[;&|]+', command)
-
     for sub in sub_commands:
         stripped = sub.strip()
-        # Check if the sub-command starts with or contains pkill/killall
-        # as the actual program being invoked
         if re.search(r'\bpkill\b', stripped):
             return BLOCKED_PKILL_MSG
         if re.search(r'\bkillall\b', stripped):
@@ -285,6 +431,7 @@ def _shell_execute(
     activator_pid: int | None,
     timeout: int = 30,
     max_output: int = 4000,
+    host_env: dict | None = None,
 ) -> str:
     """
     Execute a shell command in the agent's home directory.
@@ -292,6 +439,7 @@ def _shell_execute(
     Safety checks are performed before execution:
     - The command cannot reference the awakener project directory.
     - The command cannot kill the activator process.
+    - The command cannot interact with the awakener's host session/service.
 
     Args:
         command:       Shell command string.
@@ -300,12 +448,13 @@ def _shell_execute(
         activator_pid: PID of the activator process.
         timeout:       Max execution time in seconds.
         max_output:    Max characters to return.
+        host_env:      Detected host environment (tmux/screen/systemd).
 
     Returns:
         Command output or error message.
     """
     # Safety check
-    blocked = _is_shell_command_forbidden(command, project_dir, activator_pid)
+    blocked = _is_shell_command_forbidden(command, project_dir, activator_pid, host_env)
     if blocked:
         return blocked
 
@@ -440,6 +589,7 @@ class ToolExecutor:
         max_output: int = 4000,
         memory_manager: Any = None,
         current_round: int = 0,
+        host_env: dict | None = None,
     ):
         self.agent_home = agent_home
         self.project_dir = project_dir
@@ -449,6 +599,7 @@ class ToolExecutor:
         self.memory = memory_manager
         self.current_round = current_round
         self.notebook_written = False
+        self.host_env = host_env or {}
 
     def execute(self, name: str, args: dict) -> str:
         """
@@ -469,6 +620,7 @@ class ToolExecutor:
                 activator_pid=self.activator_pid,
                 timeout=self.timeout,
                 max_output=self.max_output,
+                host_env=self.host_env,
             )
 
         elif name == "read_file":

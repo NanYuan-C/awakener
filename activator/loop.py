@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from activator.memory import MemoryManager
-from activator.tools import ToolExecutor
+from activator.tools import ToolExecutor, detect_host_env
 from activator.context import build_system_message, build_user_message
 from activator.agent import run_round
 
@@ -325,7 +325,13 @@ def run_activation_loop(
     round_num = memory.get_last_round_number() + 1
     activator_pid = os.getpid()
 
+    # Detect host environment (tmux/screen/systemd) to protect from agent
+    host_env = detect_host_env()
+
     logger.info(f"[START] Activator started | Model: {model} | Home: {agent_home}")
+    if host_env:
+        parts = [f"{k}={v}" for k, v in host_env.items()]
+        logger.info(f"[START] Host protection: {', '.join(parts)}")
     logger.info(f"[START] Interval: {interval}s | Tool budget: {max_tool_calls} | Resume at round {round_num}")
 
     if state_callback:
@@ -363,6 +369,7 @@ def run_activation_loop(
             max_output=max_output,
             memory_manager=memory,
             current_round=round_num,
+            host_env=host_env,
         )
 
         # Run one activation round
