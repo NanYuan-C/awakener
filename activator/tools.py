@@ -635,6 +635,31 @@ class ToolExecutor:
         self.notebook_written = False
         self.host_env = host_env or {}
 
+    def _resolve_path(self, path: str) -> str:
+        """
+        Resolve a file path for read_file / write_file.
+
+        If the path is relative (e.g. ``./api_test.py``, ``data/file.txt``),
+        it is resolved against ``agent_home`` — NOT the Python process CWD.
+
+        This prevents relative paths from accidentally pointing into the
+        awakener project directory (which is the process CWD).
+
+        Absolute paths (starting with ``/``) are returned unchanged.
+
+        Args:
+            path: The raw path string from the LLM.
+
+        Returns:
+            An absolute path string.
+        """
+        if not path:
+            return path
+        if os.path.isabs(path):
+            return path
+        # Relative path: resolve against agent_home
+        return os.path.join(self.agent_home, path)
+
     def execute(self, name: str, args: dict) -> str:
         """
         Dispatch and execute a tool by name.
@@ -659,14 +684,14 @@ class ToolExecutor:
 
         elif name == "read_file":
             return _read_file(
-                path=args.get("path", ""),
+                path=self._resolve_path(args.get("path", "")),
                 project_dir=self.project_dir,
                 max_output=self.max_output,
             )
 
         elif name == "write_file":
             return _write_file(
-                path=args.get("path", ""),
+                path=self._resolve_path(args.get("path", "")),
                 content=args.get("content", ""),
                 append=args.get("append", False),
                 project_dir=self.project_dir,
