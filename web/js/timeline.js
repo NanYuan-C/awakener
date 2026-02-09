@@ -20,7 +20,6 @@
   let currentPage   = 0;
   let pageSize      = 50;
   let totalEvents   = 0;
-  let refreshTimer  = null;
 
   // -- DOM references -------------------------------------------------------
   const timelineEl   = document.getElementById('timeline');
@@ -28,7 +27,6 @@
   const pageInfoEl   = document.getElementById('page-info');
   const btnNewer     = document.getElementById('btn-newer');
   const btnOlder     = document.getElementById('btn-older');
-  const autoRefresh  = document.getElementById('auto-refresh');
 
   // ========================================================================
   // Load timeline data
@@ -173,30 +171,6 @@
     loadTimeline();
   };
 
-  // ========================================================================
-  // Auto-refresh
-  // ========================================================================
-
-  function startAutoRefresh() {
-    stopAutoRefresh();
-    refreshTimer = setInterval(function() {
-      if (autoRefresh.checked && currentPage === 0) {
-        loadTimeline();
-      }
-    }, 10000);  // Refresh every 10 seconds
-  }
-
-  function stopAutoRefresh() {
-    if (refreshTimer) {
-      clearInterval(refreshTimer);
-      refreshTimer = null;
-    }
-  }
-
-  autoRefresh.addEventListener('change', function() {
-    if (this.checked) startAutoRefresh();
-    else stopAutoRefresh();
-  });
 
   // ========================================================================
   // Utility
@@ -259,6 +233,5 @@
 
   // -- Init -----------------------------------------------------------------
   loadTimeline();
-  startAutoRefresh();
   if (typeof i18n !== 'undefined') i18n.apply();
 })();
