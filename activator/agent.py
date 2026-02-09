@@ -209,7 +209,7 @@ def _consume_stream(
                 if not tool_calls_announced:
                     tool_calls_announced = True
                     if logger:
-                        logger.info("[LLM] Preparing tool calls...")
+                        logger.loading("[LLM] Preparing tool calls")
 
                 if idx not in tool_calls_map:
                     tool_calls_map[idx] = {"id": "", "name": "", "arguments": ""}
@@ -260,8 +260,9 @@ def run_round(
         model:          LiteLLM model identifier (e.g. "deepseek/deepseek-chat").
         api_key:        Optional API key override.
         normal_limit:   Normal tool budget per round.
-        logger:         Logger callback object (must have info, tool_call,
-                        tool_result, thought_chunk, thought_done methods).
+        logger:         Logger callback object (must have info, loading,
+                        tool_call, tool_result, thought_chunk,
+                        thought_done methods).
 
     Returns:
         RoundResult with tools_used, notebook_saved, summary, and error.
@@ -272,7 +273,7 @@ def run_round(
     while total_tool_calls < hard_limit:
         # -- Notify dashboard that LLM is being called --
         if logger:
-            logger.info("[LLM] Calling model...")
+            logger.loading("[LLM] Calling model")
 
         # -- Call LLM via LiteLLM (streaming) --
         try:
@@ -397,7 +398,9 @@ def run_round(
                         logger.tool_result(result)
                     continue
 
-            # -- Execute the tool --
+            # -- Execute the tool (with loading indicator) --
+            if logger:
+                logger.loading(f"[TOOL] Executing {func_name}")
             result = tool_executor.execute(func_name, args)
             total_tool_calls += 1
 

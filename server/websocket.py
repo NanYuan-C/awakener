@@ -6,6 +6,8 @@ the management console frontend and the activator backend.
 
 Message types (server -> client):
     - "log"          : Real-time log line from the activator
+    - "loading"      : Transient loading hint (animated dots on frontend,
+                       auto-removed when the next non-loading message arrives)
     - "status"       : Agent status change (running/stopped/waiting/error)
     - "round"        : New activation round started or completed
     - "thought"      : Agent's complete thought text (non-streaming fallback)

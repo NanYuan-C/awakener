@@ -35,6 +35,9 @@
   let uptimeTimer = null;
   let liveThoughtEl = null;    // Currently streaming thought element
   let liveThoughtText = '';    // Accumulated streaming thought content
+  let loadingEl = null;        // Current loading indicator element
+  let loadingTimer = null;     // Interval for animating dots
+  let loadingDots = 0;         // Current dot count (0-3)
 
   // -- WebSocket connection -------------------------------------------------
 
@@ -77,6 +80,7 @@
    * Message types from activator (loop.py):
    *   - "status"       : { status, next_in?, message? }
    *   - "log"          : { text }
+   *   - "loading"      : { text }           (animated dots, auto-removed on next msg)
    *   - "round"        : { step, event, tools_used?, duration?, notebook_saved? }
    *   - "tool_call"    : { name, args }
    *   - "tool_result"  : { text }
@@ -89,7 +93,16 @@
   function handleMessage(msg) {
     var d = msg.data || {};
 
+    // Any non-loading message removes the current loading indicator
+    if (msg.type !== 'loading') {
+      removeLoading();
+    }
+
     switch (msg.type) {
+      case 'loading':
+        showLoading(d.text || 'Loading');
+        break;
+
       case 'status':
         updateStatus(d);
         break;
@@ -251,6 +264,56 @@
   }
 
   // -- Log panel ------------------------------------------------------------
+
+  /**
+   * Show an animated loading indicator in the log panel.
+   * The text is displayed with cycling dots: (empty) → . → .. → ...
+   * Replaces any existing loading indicator.
+   *
+   * @param {string} text - The loading text (without trailing dots).
+   */
+  function showLoading(text) {
+    removeLoading();
+
+    loadingEl = document.createElement('div');
+    loadingEl.className = 'log-line log-loading';
+
+    var now = new Date();
+    var ts = String(now.getHours()).padStart(2, '0') + ':' +
+             String(now.getMinutes()).padStart(2, '0') + ':' +
+             String(now.getSeconds()).padStart(2, '0');
+    loadingEl.dataset.prefix = '[' + ts + '] ' + text;
+    loadingDots = 0;
+    loadingEl.textContent = loadingEl.dataset.prefix;
+
+    logBody.appendChild(loadingEl);
+
+    // Animate dots: (empty) → . → .. → ... → (empty) → ...
+    loadingTimer = setInterval(function() {
+      loadingDots = (loadingDots + 1) % 4;
+      loadingEl.textContent = loadingEl.dataset.prefix + '.'.repeat(loadingDots);
+    }, 400);
+
+    if (autoScroll.checked) {
+      logBody.scrollTop = logBody.scrollHeight;
+    }
+  }
+
+  /**
+   * Remove the current loading indicator and stop its animation.
+   * Called automatically when any non-loading message arrives.
+   */
+  function removeLoading() {
+    if (loadingTimer) {
+      clearInterval(loadingTimer);
+      loadingTimer = null;
+    }
+    if (loadingEl) {
+      loadingEl.remove();
+      loadingEl = null;
+    }
+    loadingDots = 0;
+  }
 
   /**
    * Finalize any currently-streaming thought element.

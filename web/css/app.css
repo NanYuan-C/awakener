@@ -756,6 +756,12 @@ select.form-control {
   50%      { border-left-color: transparent; }
 }
 
+/* Loading indicator: ephemeral hint with animated dots */
+.log-line.log-loading {
+  color: #9399b2;
+  font-style: italic;
+}
+
 
 /* ==========================================================================
    7. Standalone Pages (Login / Setup)

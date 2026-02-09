@@ -212,6 +212,28 @@ class ActivatorLogger:
         self._write(line)
         self._broadcast("thought_done", {"text": full_text})
 
+    def loading(self, text: str) -> None:
+        """
+        Broadcast a transient loading indicator to the frontend.
+
+        The frontend displays this with animated dots and auto-removes it
+        when the next real message arrives. Used for three phases:
+        - "[LLM] Calling model"       : waiting for LLM response
+        - "[LLM] Preparing tool calls" : LLM streaming tool arguments
+        - "[TOOL] Executing <name>"    : tool being executed
+
+        Also written to the log file for debugging, but the frontend
+        treats it as ephemeral (disappears on next message).
+
+        Args:
+            text: The loading hint text (without trailing dots).
+        """
+        ts = self._timestamp()
+        line = f"[{ts}] {text}..."
+        self._write(line)
+        print(line, flush=True)
+        self._broadcast("loading", {"text": text})
+
     def tool_call(self, name: str, args: dict) -> None:
         """Log a tool invocation."""
         ts = self._timestamp()
