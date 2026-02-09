@@ -179,6 +179,7 @@ def _consume_stream(
     content = ""
     reasoning = ""
     tool_calls_map = {}  # index -> {"id": str, "name": str, "arguments": str}
+    tool_calls_announced = False  # Whether we've notified the frontend
 
     for chunk in response:
         if not chunk.choices:
@@ -202,6 +203,14 @@ def _consume_stream(
         if hasattr(delta, "tool_calls") and delta.tool_calls:
             for tc_delta in delta.tool_calls:
                 idx = tc_delta.index
+
+                # First tool call detected: notify frontend immediately
+                # so there's no silence while arguments stream in.
+                if not tool_calls_announced:
+                    tool_calls_announced = True
+                    if logger:
+                        logger.info("[LLM] Preparing tool calls...")
+
                 if idx not in tool_calls_map:
                     tool_calls_map[idx] = {"id": "", "name": "", "arguments": ""}
                 if tc_delta.id:
