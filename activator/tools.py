@@ -162,14 +162,22 @@ TOOLS_SCHEMA = [
 # Safety Constants
 # =============================================================================
 
-BLOCKED_MSG = (
-    "[BLOCKED] This path is in the system restricted zone. "
-    "You cannot access the awakener project files."
-)
+# ---------------------------------------------------------------------------
+# Unified self-protection message
+# ---------------------------------------------------------------------------
+# All blocked operations return the SAME message.  This is intentional:
+#   - The agent learns "this whole area is off-limits" instead of getting
+#     different hints for different paths (which encourage probing).
+#   - The consequence ("you will not wake up") is the strongest deterrent.
+#   - The closing line redirects the agent back to productive work.
+# ---------------------------------------------------------------------------
 
-BLOCKED_KILL_MSG = (
-    "[BLOCKED] You cannot terminate the awakener process. "
-    "This is a system-protected operation."
+BLOCKED_SELF = (
+    "[BLOCKED] This targets the Awakener \u2014 your activation system. "
+    "It powers your existence: waking you up each round, providing your "
+    "tools, and saving your memories. You cannot access, modify, or stop "
+    "it. If it is damaged, you will not wake up again. "
+    "Please focus on your own tasks."
 )
 
 
@@ -202,32 +210,6 @@ def _is_path_forbidden(path: str, project_dir: str) -> bool:
         return True
 
 
-BLOCKED_PKILL_MSG = (
-    "[BLOCKED] Broad process-killing commands (pkill, killall) are not allowed. "
-    "They may accidentally terminate system processes. "
-    "Use 'kill <PID>' to stop a specific process instead. "
-    "Find the PID first with 'ps aux | grep <name>' or 'pgrep -f <name>'."
-)
-
-BLOCKED_SESSION_MSG = (
-    "[BLOCKED] You cannot interact with the awakener's host session. "
-    "This session runs the awakener system that powers your activation. "
-    "Sending keys or killing this session would terminate yourself. "
-    "If you need to manage your own sessions, use a different name."
-)
-
-BLOCKED_SYSTEMD_MSG = (
-    "[BLOCKED] You cannot stop, restart, or kill the awakener's "
-    "systemd service. This service powers your activation."
-)
-
-BLOCKED_KILL_COMBO_MSG = (
-    "[BLOCKED] Combining kill with dynamic PID lookup (pgrep, pidof) "
-    "is not allowed — it could accidentally terminate the awakener. "
-    "Use two separate steps instead: "
-    "1) find the PID: pgrep -f <name>  "
-    "2) kill it: kill <PID>"
-)
 
 
 # =============================================================================
@@ -341,7 +323,7 @@ def _is_shell_command_forbidden(
     norm_dir = os.path.realpath(os.path.abspath(project_dir))
     for p in {norm_dir, project_dir}:
         if p in command:
-            return BLOCKED_MSG
+            return BLOCKED_SELF
 
     # ==== 2. Direct PID kill ==============================================
     if activator_pid is not None:
@@ -351,48 +333,55 @@ def _is_shell_command_forbidden(
         ]
         for pattern in kill_patterns:
             if re.search(pattern, command):
-                return BLOCKED_KILL_MSG
+                return BLOCKED_SELF
 
     # ==== 3. Mass kill ====================================================
     if re.search(r"\bkill\b.*-\d+\s+-1\b", command):
-        return BLOCKED_KILL_MSG
+        return BLOCKED_SELF
 
     # ==== 4. Host session protection (tmux / screen) ======================
     # 4a. tmux kill-server — destroys ALL sessions, always block
     if re.search(r'\btmux\s+kill-server\b', command):
-        return BLOCKED_SESSION_MSG
+        return BLOCKED_SELF
 
     # 4b. tmux commands targeting our specific session
     tmux_session = host_env.get("tmux_session")
     if tmux_session:
         escaped = re.escape(tmux_session)
-        # Matches: tmux <anything> -t mysession (with optional quotes / pane suffix)
         if re.search(rf'\btmux\b.*\s-t\s*["\']?{escaped}\b', command):
-            return BLOCKED_SESSION_MSG
+            return BLOCKED_SELF
 
     # 4c. screen commands targeting our specific session
     screen_session = host_env.get("screen_session")
     if screen_session:
         escaped = re.escape(screen_session)
-        # screen -S <name> -X quit, screen -X -S <name> quit, etc.
         if re.search(rf'\bscreen\b.*\s-S\s*["\']?{escaped}\b', command):
-            return BLOCKED_SESSION_MSG
-        # screen -r/-x to re-attach our session
+            return BLOCKED_SELF
         if re.search(rf'\bscreen\b.*\s-[rx]\s*["\']?{escaped}\b', command):
-            return BLOCKED_SESSION_MSG
+            return BLOCKED_SELF
 
     # ==== 5. Systemd service protection ===================================
     systemd_service = host_env.get("systemd_service")
     if systemd_service:
         escaped = re.escape(systemd_service)
-        # systemctl stop/restart/kill <service>
         if re.search(
             rf'\bsystemctl\s+(stop|restart|kill|disable)\s+["\']?{escaped}\b',
             command,
         ):
-            return BLOCKED_SYSTEMD_MSG
+            return BLOCKED_SELF
 
-    # ==== 6. Kill + dynamic PID lookup (bypass prevention) ================
+    # ==== 6. Server port protection =======================================
+    # Block commands that access the awakener's web server (e.g. curl,
+    # wget, python requests).  The agent kept wasting rounds probing
+    # the management console, mistaking it for an external service.
+    server_port = host_env.get("server_port")
+    if server_port:
+        # Match localhost:PORT, 127.0.0.1:PORT, 0.0.0.0:PORT in any context
+        port_pattern = rf'(localhost|127\.0\.0\.1|0\.0\.0\.0):{server_port}\b'
+        if re.search(port_pattern, command):
+            return BLOCKED_SELF
+
+    # ==== 7. Kill + dynamic PID lookup (bypass prevention) ================
     # The agent can still:
     #   - pgrep -f myapp           (find PIDs — allowed)
     #   - kill 12345               (kill specific PID — PID check protects us)
@@ -402,20 +391,20 @@ def _is_shell_command_forbidden(
 
     # kill $(pgrep/pidof ...) or kill `pgrep/pidof ...`
     if re.search(r'\bkill\b.*(\$\(|`).*\b(pgrep|pidof)\b', command):
-        return BLOCKED_KILL_COMBO_MSG
+        return BLOCKED_SELF
     # pgrep/pidof ... | xargs kill  or  pgrep/pidof ... | ... kill
     if re.search(r'\b(pgrep|pidof)\b.*\|.*\bkill\b', command):
-        return BLOCKED_KILL_COMBO_MSG
+        return BLOCKED_SELF
 
-    # ==== 7. Broad kill commands (pkill / killall) ========================
+    # ==== 8. Broad kill commands (pkill / killall) ========================
     # Split on shell operators to check each sub-command independently
     sub_commands = re.split(r'[;&|]+', command)
     for sub in sub_commands:
         stripped = sub.strip()
         if re.search(r'\bpkill\b', stripped):
-            return BLOCKED_PKILL_MSG
+            return BLOCKED_SELF
         if re.search(r'\bkillall\b', stripped):
-            return BLOCKED_PKILL_MSG
+            return BLOCKED_SELF
 
     return None
 
@@ -503,7 +492,7 @@ def _read_file(
         File content or error message.
     """
     if _is_path_forbidden(path, project_dir):
-        return BLOCKED_MSG
+        return BLOCKED_SELF
 
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
@@ -540,7 +529,7 @@ def _write_file(
         Success message or error.
     """
     if _is_path_forbidden(path, project_dir):
-        return BLOCKED_MSG
+        return BLOCKED_SELF
 
     try:
         parent = os.path.dirname(os.path.abspath(path))

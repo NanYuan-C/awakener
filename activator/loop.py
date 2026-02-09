@@ -328,6 +328,10 @@ def run_activation_loop(
     # Detect host environment (tmux/screen/systemd) to protect from agent
     host_env = detect_host_env()
 
+    # Include the web server port so the agent can't probe it
+    web_config = config.get("web", {})
+    host_env["server_port"] = web_config.get("port", 8080)
+
     logger.info(f"[START] Activator started | Model: {model} | Home: {agent_home}")
     if host_env:
         parts = [f"{k}={v}" for k, v in host_env.items()]
