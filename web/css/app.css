@@ -960,6 +960,36 @@ select.form-control {
   font-variant-numeric: tabular-nums;
 }
 
+/* -- Toolbar: player-style control buttons -------------------------------- */
+
+.log-toolbar-right .btn-icon {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  border: none;
+  border-radius: var(--radius-sm);
+}
+
+.log-toolbar-right .btn-icon.btn-success {
+  background: var(--color-success);
+  color: #fff;
+}
+
+.log-toolbar-right .btn-icon.btn-success:hover:not(:disabled) {
+  background: #059669;
+}
+
+.log-toolbar-right .btn-icon.btn-danger {
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.log-toolbar-right .btn-icon.btn-danger:hover:not(:disabled) {
+  background: #dc2626;
+}
+
 /* -- Log panel (fills remaining height) ----------------------------------- */
 
 .log-card .log-panel {

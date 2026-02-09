@@ -1,0 +1,7 @@
+Fix i18n syntax error and shrink toolbar control buttons
+
+- Fix: Chinese curly quotes in i18n.js broke the JS parser, causing
+  the entire i18n module to fail (language switch non-functional).
+  Replaced with Unicode escapes (\u201c / \u201d).
+- Shrink start/stop buttons to 26x26 player-style icons with clean
+  red/green colors and no border.
