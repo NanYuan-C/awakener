@@ -48,7 +48,9 @@ class RoundResult:
     Attributes:
         tools_used:     Total tool calls made this round.
         notebook_saved: Whether the agent called notebook_write.
-        summary:        Text summary extracted from the agent's messages.
+        summary:        Full text summary (for timeline page display).
+        action_log:     Concise action log — only the brief thoughts from
+                        turns that triggered tool calls (for prompt injection).
         error:          Error message if the round failed, else None.
     """
 
@@ -57,11 +59,13 @@ class RoundResult:
         tools_used: int = 0,
         notebook_saved: bool = False,
         summary: str = "",
+        action_log: str = "",
         error: str | None = None,
     ):
         self.tools_used = tools_used
         self.notebook_saved = notebook_saved
         self.summary = summary
+        self.action_log = action_log
         self.error = error
 
 
@@ -101,6 +105,41 @@ def _extract_summary(messages: list[dict]) -> str:
         full_text = "(no text output this round)"
 
     return full_text
+
+
+def _extract_action_log(messages: list[dict]) -> str:
+    """
+    Extract a concise action log from "working" assistant messages.
+
+    Only includes assistant messages that triggered tool calls — the brief
+    thoughts the agent had between tool executions.  The final assistant
+    message (which has no tool_calls and is typically a long summary) is
+    excluded because the notebook already captures that information.
+
+    This action log is injected into the next round's prompt so the agent
+    can see *what it did* without the redundant summary.
+
+    Args:
+        messages: Full conversation history for this round.
+
+    Returns:
+        A concise, time-prefixed action log.
+    """
+    parts = []
+    for msg in messages:
+        if msg.get("role") != "assistant":
+            continue
+        # Only include turns that triggered tool calls
+        if not msg.get("tool_calls"):
+            continue
+        ts = msg.get("_timestamp", "")
+        prefix = f"[{ts}] " if ts else ""
+        if msg.get("reasoning_content"):
+            parts.append(f"{prefix}[Thinking] {msg['reasoning_content']}")
+        if msg.get("content"):
+            parts.append(f"{prefix}{msg['content']}")
+
+    return "\n".join(parts).strip() or "(no action log this round)"
 
 
 # =============================================================================
@@ -297,6 +336,7 @@ def run_round(
                 tools_used=total_tool_calls,
                 notebook_saved=tool_executor.notebook_written,
                 summary=_extract_summary(messages),
+                action_log=_extract_action_log(messages),
                 error=error_msg,
             )
 
@@ -311,6 +351,7 @@ def run_round(
                 tools_used=total_tool_calls,
                 notebook_saved=tool_executor.notebook_written,
                 summary=_extract_summary(messages),
+                action_log=_extract_action_log(messages),
                 error=error_msg,
             )
 
@@ -430,4 +471,5 @@ def run_round(
         tools_used=total_tool_calls,
         notebook_saved=tool_executor.notebook_written,
         summary=_extract_summary(messages),
+        action_log=_extract_action_log(messages),
     )

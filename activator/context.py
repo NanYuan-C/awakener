@@ -12,13 +12,18 @@ The context consists of two parts:
 2. User message:
    - Current time and round number
    - Tool budget for this round
-   - Recent 3 rounds of notebook entries
-   - Inspiration message (if any)
+   - Recent Activity: 1 round of timeline action log (concise step-by-step)
+   - Your Recent Notes: 1 round of notebook (detailed plan & status)
+   - Inspiration from admin (if any)
    - Wake-up signal
 
-This design keeps the agent's context bounded and predictable.
-The persona prompt defines the agent's personality and motivation,
-while the appended rules ensure consistent tool usage.
+The "action log + notebook" combination gives the agent two complementary
+perspectives on its recent history:
+  - Action log: *what it did* (objective, timestamped tool-calling steps)
+  - Notebook: *what it learned and plans* (subjective, structured notes)
+
+This replaces the previous 3-round-notebook injection, saving tokens while
+providing better continuity.
 """
 
 import os
@@ -117,7 +122,8 @@ def build_user_message(
     round_num: int,
     max_tool_calls: int,
     memory: MemoryManager,
-    inject_count: int = 3,
+    inject_timeline: int = 1,
+    inject_notes: int = 1,
 ) -> str:
     """
     Build the user message with contextual information.
@@ -125,15 +131,22 @@ def build_user_message(
     This message is sent at the start of each round and contains:
     - Current UTC time and round number
     - Tool budget for this round
-    - Recent notebook entries (last N rounds)
+    - Recent Activity: action log from the last round's timeline
+    - Your Recent Notes: the latest notebook entry
     - Inspiration from admin (if any)
     - Wake-up signal
 
+    The action-log + notebook combination replaces the old 3-round-notebook
+    injection. It provides better continuity with fewer tokens:
+    - Action log shows *what the agent did* (timestamped steps)
+    - Notebook shows *what the agent learned and plans next*
+
     Args:
-        round_num:      Current activation round number.
-        max_tool_calls: Tool budget for this round.
-        memory:         MemoryManager instance.
-        inject_count:   Number of recent notebook entries to inject.
+        round_num:        Current activation round number.
+        max_tool_calls:   Tool budget for this round.
+        memory:           MemoryManager instance.
+        inject_timeline:  Number of recent timeline entries to inject.
+        inject_notes:     Number of recent notebook entries to inject.
 
     Returns:
         Complete user message string.
@@ -146,8 +159,28 @@ def build_user_message(
     parts.append(f"Round {round_num} (tool budget: {max_tool_calls})")
     parts.append("")
 
+    # Recent activity (timeline action log)
+    recent_timeline = memory.get_recent_timeline(count=inject_timeline)
+    if recent_timeline:
+        parts.append("## Recent Activity")
+        for entry in recent_timeline:
+            r = entry.get("round", "?")
+            ts = entry.get("timestamp", "")
+            tools = entry.get("tools_used", 0)
+            dur = entry.get("duration", 0)
+            # Prefer the concise action_log; fall back to full summary
+            # for legacy entries that don't have the action_log field.
+            action_log = entry.get("action_log", "")
+            if not action_log:
+                action_log = entry.get("summary", "")
+            parts.append(
+                f"--- Round {r} | {ts} | Tools: {tools} | {dur}s ---"
+            )
+            parts.append(action_log)
+            parts.append("")
+
     # Recent notebook entries
-    recent_notes = memory.get_recent_notes(count=inject_count)
+    recent_notes = memory.get_recent_notes(count=inject_notes)
     if recent_notes:
         parts.append("## Your Recent Notes")
         for note in recent_notes:

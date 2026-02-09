@@ -12,8 +12,10 @@ Manages the agent's dual-layer memory system:
 
 2. Timeline (data/timeline/<YYYY-MM-DD>.jsonl)
    - Activator's objective record, one entry per round.
-   - Contains round number, timestamp, tool count, duration, summary.
-   - Used by the web UI (not injected into the agent's prompt).
+   - Contains round number, timestamp, tool count, duration, summary,
+     and a concise action_log (brief thoughts from tool-calling turns).
+   - The full summary is displayed on the web timeline page.
+   - The action_log is injected into the prompt for round continuity.
    - Per-day files for manageable sizes.
 
 3. Inspiration (data/inspiration.txt)
@@ -258,6 +260,7 @@ class MemoryManager:
         duration: float,
         summary: str,
         notebook_saved: bool = True,
+        action_log: str = "",
     ) -> None:
         """
         Append one round's record to today's timeline file.
@@ -268,8 +271,11 @@ class MemoryManager:
             round_num:      The round number.
             tools_used:     Number of tool calls made.
             duration:       Round duration in seconds.
-            summary:        Full summary of the agent's thoughts and outputs.
+            summary:        Full summary of the agent's thoughts and outputs
+                            (displayed on the timeline web page).
             notebook_saved: Whether the agent saved a notebook entry.
+            action_log:     Concise action log — only the brief thoughts from
+                            tool-calling turns (injected into next round's prompt).
         """
         entry = {
             "round": round_num,
@@ -277,6 +283,7 @@ class MemoryManager:
             "tools_used": tools_used,
             "duration": round(duration, 1),
             "summary": summary,
+            "action_log": action_log,
             "notebook_saved": notebook_saved,
         }
 
@@ -286,6 +293,22 @@ class MemoryManager:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except OSError:
             pass
+
+    def get_recent_timeline(self, count: int = 1) -> list[dict]:
+        """
+        Get the most recent N timeline entries.
+
+        Used by context.py to inject the agent's recent activity log
+        into the prompt so it can resume work without re-exploring.
+
+        Args:
+            count: Number of recent entries to return.
+
+        Returns:
+            List of up to ``count`` timeline entries, oldest first.
+        """
+        entries = self._read_all_from_dir(self.timeline_dir, self._legacy_timeline)
+        return entries[-count:] if len(entries) > count else entries
 
     def _get_last_timeline_round(self) -> int:
         """

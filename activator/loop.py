@@ -348,7 +348,11 @@ def run_activation_loop(
             {"role": "user", "content": user_msg},
         ]
 
-        logger.info(f"[CONTEXT] Persona: {persona} | Notes injected: {len(memory.get_recent_notes())}")
+        logger.info(
+            f"[CONTEXT] Persona: {persona} | "
+            f"Timeline: {len(memory.get_recent_timeline(count=1))} | "
+            f"Notes: {len(memory.get_recent_notes(count=1))}"
+        )
 
         # Create tool executor for this round
         tool_exec = ToolExecutor(
@@ -385,6 +389,7 @@ def run_activation_loop(
             tools_used=result.tools_used,
             duration=duration,
             summary=result.summary,
+            action_log=result.action_log,
             notebook_saved=result.notebook_saved,
         )
 

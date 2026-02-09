@@ -2,7 +2,8 @@
  * Awakener - Memory Page Logic
  * ===============================
  * Displays the agent's notebook entries (one per activation round).
- * Entries are shown newest-first, with full content visible.
+ * Entries are shown newest-first. Each card shows 10 lines by default
+ * with a toggle to expand/collapse the full content.
  *
  * Depends on: api.js (global `api` object), i18n.js (global `i18n` object)
  */
@@ -10,9 +11,12 @@
 (function() {
   'use strict';
 
+  // -- Config ---------------------------------------------------------------
+  var MAX_LINES = 10;
+
   // -- DOM references -------------------------------------------------------
-  const memoryBody = document.getElementById('memory-body');
-  const memoryMeta = document.getElementById('memory-meta');
+  var memoryBody = document.getElementById('memory-body');
+  var memoryMeta = document.getElementById('memory-meta');
 
   // ========================================================================
   // Load notebook entries
@@ -43,21 +47,7 @@
       memoryBody.innerHTML = '';
 
       entries.forEach(function(entry) {
-        var card = document.createElement('div');
-        card.className = 'memory-card';
-
-        var time = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '';
-        var round = entry.round || '?';
-        var content = entry.content || '';
-
-        card.innerHTML =
-          '<div class="memory-card-header">' +
-            '<span class="badge badge-primary">Round ' + round + '</span>' +
-            '<span class="text-xs text-muted">' + escapeHtml(time) + '</span>' +
-          '</div>' +
-          '<div class="memory-card-content">' + formatContent(content) + '</div>';
-
-        memoryBody.appendChild(card);
+        memoryBody.appendChild(createMemoryCard(entry));
       });
     } catch (e) {
       memoryBody.innerHTML =
@@ -66,8 +56,81 @@
   };
 
   // ========================================================================
+  // Card builder (with 10-line collapse)
+  // ========================================================================
+
+  /**
+   * Create a single memory card element.
+   * If content exceeds MAX_LINES, only the first MAX_LINES are shown
+   * with a "Show more" toggle.
+   *
+   * @param {Object} entry - Notebook entry {round, timestamp, content}.
+   * @returns {HTMLElement} The card element.
+   */
+  function createMemoryCard(entry) {
+    var card = document.createElement('div');
+    card.className = 'memory-card';
+
+    var time = entry.timestamp ? new Date(entry.timestamp).toLocaleString() : '';
+    var round = entry.round || '?';
+    var content = entry.content || '';
+
+    var lines = content.split('\n');
+    var isLong = lines.length > MAX_LINES;
+    var fullHtml = formatContent(content);
+    var shortHtml = isLong
+      ? formatContent(lines.slice(0, MAX_LINES).join('\n'))
+      : fullHtml;
+
+    // -- Header
+    var header = document.createElement('div');
+    header.className = 'memory-card-header';
+    header.innerHTML =
+      '<span class="badge badge-primary">Round ' + round + '</span>' +
+      '<span class="text-xs text-muted">' + escapeHtml(time) + '</span>';
+    card.appendChild(header);
+
+    // -- Content
+    var contentDiv = document.createElement('div');
+    contentDiv.className = 'memory-card-content';
+    contentDiv.innerHTML = shortHtml;
+    card.appendChild(contentDiv);
+
+    // -- Toggle (only for long entries)
+    if (isLong) {
+      var footer = document.createElement('div');
+      footer.className = 'memory-card-toggle';
+
+      var toggle = document.createElement('a');
+      toggle.className = 'memory-toggle';
+      toggle.textContent = t('showMore');
+
+      var expanded = false;
+      toggle.onclick = function() {
+        expanded = !expanded;
+        contentDiv.innerHTML = expanded ? fullHtml : shortHtml;
+        toggle.textContent = expanded ? t('showLess') : t('showMore');
+      };
+
+      footer.appendChild(toggle);
+      card.appendChild(footer);
+    }
+
+    return card;
+  }
+
+  // ========================================================================
   // Utility
   // ========================================================================
+
+  /**
+   * i18n helper with fallback.
+   */
+  function t(key) {
+    if (typeof i18n !== 'undefined' && i18n.t) return i18n.t(key);
+    var fallback = { showMore: 'Show more', showLess: 'Collapse' };
+    return fallback[key] || key;
+  }
 
   /**
    * Format notebook content: escape HTML, preserve whitespace and newlines.

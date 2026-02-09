@@ -1242,25 +1242,16 @@ select.form-control {
    12. Memory Page
    ========================================================================== */
 
-.memory-viewer {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.memory-viewer-header {
+/* Page header: title + refresh button (no card wrapper) */
+.memory-page-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-md) var(--spacing-lg);
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-bg);
+  margin-bottom: var(--spacing-md);
 }
 
-/* Container for all notebook cards */
+/* Container for all notebook cards (no outer card) */
 #memory-body {
-  padding: var(--spacing-lg);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
@@ -1293,7 +1284,23 @@ select.form-control {
   font-size: var(--font-size-sm);
   line-height: 1.75;
   color: var(--color-text);
-  /* No max-height, no scroll — full content visible */
+}
+
+/* Toggle link at the bottom of collapsed cards */
+.memory-card-toggle {
+  padding: 0 var(--spacing-md) var(--spacing-sm);
+}
+
+.memory-toggle {
+  display: inline-block;
+  font-size: var(--font-size-xs);
+  color: var(--color-primary);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.memory-toggle:hover {
+  text-decoration: underline;
 }
 
 
