@@ -1215,6 +1215,28 @@ select.form-control {
   margin-top: var(--spacing-xs);
 }
 
+.timeline-summary {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+.timeline-toggle {
+  display: inline-block;
+  margin-top: var(--spacing-xs);
+  font-size: var(--font-size-xs);
+  color: var(--color-primary);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.timeline-toggle:hover {
+  text-decoration: underline;
+}
+
 
 /* ==========================================================================
    12. Memory Page

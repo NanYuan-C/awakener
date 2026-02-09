@@ -31,6 +31,8 @@ DeepSeek reasoner support:
 """
 
 import json
+from datetime import datetime
+
 import litellm
 from activator.tools import ToolExecutor, TOOLS_SCHEMA
 
@@ -67,34 +69,36 @@ class RoundResult:
 # Summary Extraction
 # =============================================================================
 
-def _extract_summary(messages: list[dict], max_chars: int = 500) -> str:
+def _extract_summary(messages: list[dict]) -> str:
     """
-    Extract a brief summary from the agent's messages this round.
+    Extract a full summary from the agent's messages this round.
 
     Collects reasoning_content and content from assistant messages,
-    skipping tool calls and tool results for brevity.
+    skipping tool calls and tool results. Each section is prefixed
+    with its timestamp (if available) for timeline display.
+
+    No truncation — the complete thought process is preserved.
 
     Args:
-        messages:  Full conversation history for this round.
-        max_chars: Maximum characters for the summary.
+        messages: Full conversation history for this round.
 
     Returns:
-        A text summary of the agent's thoughts and outputs.
+        A text summary of the agent's thoughts and outputs, with
+        time prefixes like ``[15:04:18] [Thinking] ...``.
     """
     parts = []
     for msg in messages:
         if msg.get("role") == "assistant":
+            ts = msg.get("_timestamp", "")
+            prefix = f"[{ts}] " if ts else ""
             if msg.get("reasoning_content"):
-                parts.append(f"[Thinking] {msg['reasoning_content']}")
+                parts.append(f"{prefix}[Thinking] {msg['reasoning_content']}")
             if msg.get("content"):
-                parts.append(msg["content"])
+                parts.append(f"{prefix}{msg['content']}")
 
     full_text = "\n".join(parts).strip()
     if not full_text:
         full_text = "(no text output this round)"
-
-    if len(full_text) > max_chars:
-        full_text = full_text[:max_chars] + "..."
 
     return full_text
 
@@ -319,16 +323,19 @@ def run_round(
             preview = reasoning[:500] + ("..." if len(reasoning) > 500 else "")
             logger.info(f"[REASONING] {preview}")
 
+        # Timestamp for this LLM turn (used by _extract_summary)
+        turn_ts = datetime.now().strftime("%H:%M:%S")
+
         # -- No tool calls: round ends naturally --
         if not tool_calls_map:
-            assistant_msg = {"role": "assistant", "content": content or ""}
+            assistant_msg = {"role": "assistant", "content": content or "", "_timestamp": turn_ts}
             if reasoning:
                 assistant_msg["reasoning_content"] = reasoning
             messages.append(assistant_msg)
             break
 
         # -- Build assistant message with tool calls --
-        assistant_msg = {"role": "assistant", "content": content or ""}
+        assistant_msg = {"role": "assistant", "content": content or "", "_timestamp": turn_ts}
         if reasoning:
             assistant_msg["reasoning_content"] = reasoning
 

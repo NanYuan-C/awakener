@@ -384,7 +384,7 @@ def run_activation_loop(
             round_num=round_num,
             tools_used=result.tools_used,
             duration=duration,
-            summary=result.summary[:300],
+            summary=result.summary,
             notebook_saved=result.notebook_saved,
         )
 

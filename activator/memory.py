@@ -3,16 +3,18 @@ Awakener - Memory Manager
 ============================
 Manages the agent's dual-layer memory system:
 
-1. Notebook (data/notebook.jsonl)
+1. Notebook (data/notebook/<YYYY-MM-DD>.jsonl)
    - Agent's subjective per-round notes.
    - Written by the agent via notebook_write tool.
    - Read by the agent via notebook_read tool.
    - Last N rounds auto-injected into the prompt each round.
+   - Per-day files for manageable sizes.
 
-2. Timeline (data/timeline.jsonl)
+2. Timeline (data/timeline/<YYYY-MM-DD>.jsonl)
    - Activator's objective record, one entry per round.
    - Contains round number, timestamp, tool count, duration, summary.
    - Used by the web UI (not injected into the agent's prompt).
+   - Per-day files for manageable sizes.
 
 3. Inspiration (data/inspiration.txt)
    - One-way hints from the admin to the agent.
@@ -21,13 +23,21 @@ Manages the agent's dual-layer memory system:
 
 File layout (under project data dir):
     data/
-      notebook.jsonl     <- agent's per-round notes
-      timeline.jsonl     <- activator's round history
+      notebook/
+        2026-02-09.jsonl <- agent's per-round notes (one file per day)
+      timeline/
+        2026-02-09.jsonl <- activator's round history (one file per day)
       inspiration.txt    <- admin -> agent hints
       logs/
         2026-02-09.log   <- per-day run log (managed by loop.py)
+
+Backward compatibility:
+    If legacy single-file notebook.jsonl or timeline.jsonl exist in data/,
+    their entries are included when reading (but new writes go to the
+    per-day directory).
 """
 
+import glob
 import json
 import os
 from datetime import datetime, timezone
@@ -53,20 +63,75 @@ class MemoryManager:
         """
         Initialize the memory manager.
 
-        Creates the data directory if it doesn't exist.
+        Creates the data directory and subdirectories if they don't exist.
 
         Args:
             data_dir: Absolute path to the data/ directory.
         """
         self.data_dir = data_dir
-        self.notebook_path = os.path.join(data_dir, "notebook.jsonl")
-        self.timeline_path = os.path.join(data_dir, "timeline.jsonl")
+        self.notebook_dir = os.path.join(data_dir, "notebook")
+        self.timeline_dir = os.path.join(data_dir, "timeline")
         self.inspiration_path = os.path.join(data_dir, "inspiration.txt")
 
-        os.makedirs(data_dir, exist_ok=True)
+        # Legacy single-file paths (for backward compatibility reads)
+        self._legacy_notebook = os.path.join(data_dir, "notebook.jsonl")
+        self._legacy_timeline = os.path.join(data_dir, "timeline.jsonl")
+
+        os.makedirs(self.notebook_dir, exist_ok=True)
+        os.makedirs(self.timeline_dir, exist_ok=True)
 
         # Cache: loaded on first access and kept in sync
         self._notebook_cache: list[dict] | None = None
+
+    # =========================================================================
+    # Helpers: per-day file I/O
+    # =========================================================================
+
+    @staticmethod
+    def _today_filename() -> str:
+        """Return today's date as YYYY-MM-DD.jsonl."""
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d") + ".jsonl"
+
+    @staticmethod
+    def _read_jsonl_file(path: str) -> list[dict]:
+        """Read all JSON objects from a single .jsonl file."""
+        entries = []
+        if not os.path.exists(path):
+            return entries
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            entries.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            continue
+        except OSError:
+            pass
+        return entries
+
+    def _read_all_from_dir(self, directory: str, legacy_path: str | None = None) -> list[dict]:
+        """
+        Read all .jsonl files in a directory (sorted by filename = date).
+
+        Also includes entries from the legacy single-file if it exists.
+
+        Returns:
+            All entries in chronological order.
+        """
+        entries = []
+
+        # Legacy single-file (if present)
+        if legacy_path and os.path.exists(legacy_path):
+            entries.extend(self._read_jsonl_file(legacy_path))
+
+        # Per-day files, sorted by date
+        pattern = os.path.join(directory, "*.jsonl")
+        for filepath in sorted(glob.glob(pattern)):
+            entries.extend(self._read_jsonl_file(filepath))
+
+        return entries
 
     # =========================================================================
     # Notebook Operations
@@ -74,36 +139,24 @@ class MemoryManager:
 
     def _load_notebook(self) -> list[dict]:
         """
-        Load all notebook entries from notebook.jsonl into memory.
+        Load all notebook entries from per-day files into memory.
 
         Each line is a JSON object with keys: round, timestamp, content.
 
         Returns:
-            List of notebook entry dicts, ordered by round.
+            List of notebook entry dicts, ordered chronologically.
         """
         if self._notebook_cache is not None:
             return self._notebook_cache
 
-        entries = []
-        if os.path.exists(self.notebook_path):
-            try:
-                with open(self.notebook_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        if line:
-                            try:
-                                entries.append(json.loads(line))
-                            except json.JSONDecodeError:
-                                continue
-            except OSError:
-                pass
-
-        self._notebook_cache = entries
-        return entries
+        self._notebook_cache = self._read_all_from_dir(
+            self.notebook_dir, self._legacy_notebook
+        )
+        return self._notebook_cache
 
     def write_notebook(self, round_num: int, content: str) -> None:
         """
-        Append a new note for the given round to notebook.jsonl.
+        Append a new note for the given round to today's notebook file.
 
         If a note for this round already exists, it is overwritten
         (the old entry remains in the file, but the latest one wins
@@ -119,9 +172,10 @@ class MemoryManager:
             "content": content.strip(),
         }
 
-        # Append to file
+        # Append to today's file
+        filepath = os.path.join(self.notebook_dir, self._today_filename())
         try:
-            with open(self.notebook_path, "a", encoding="utf-8") as f:
+            with open(filepath, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except OSError:
             pass
@@ -206,7 +260,7 @@ class MemoryManager:
         notebook_saved: bool = True,
     ) -> None:
         """
-        Append one round's record to timeline.jsonl.
+        Append one round's record to today's timeline file.
 
         Called by the activator loop after each round completes.
 
@@ -214,7 +268,7 @@ class MemoryManager:
             round_num:      The round number.
             tools_used:     Number of tool calls made.
             duration:       Round duration in seconds.
-            summary:        Brief summary of what happened.
+            summary:        Full summary of the agent's thoughts and outputs.
             notebook_saved: Whether the agent saved a notebook entry.
         """
         entry = {
@@ -226,39 +280,24 @@ class MemoryManager:
             "notebook_saved": notebook_saved,
         }
 
+        filepath = os.path.join(self.timeline_dir, self._today_filename())
         try:
-            with open(self.timeline_path, "a", encoding="utf-8") as f:
+            with open(filepath, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except OSError:
             pass
 
     def _get_last_timeline_round(self) -> int:
         """
-        Get the highest round number from timeline.jsonl.
+        Get the highest round number from all timeline files.
 
         Returns:
             The last round number, or 0 if no entries exist.
         """
-        if not os.path.exists(self.timeline_path):
+        entries = self._read_all_from_dir(self.timeline_dir, self._legacy_timeline)
+        if not entries:
             return 0
-
-        last_round = 0
-        try:
-            with open(self.timeline_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        try:
-                            entry = json.loads(line)
-                            r = entry.get("round", 0)
-                            if r > last_round:
-                                last_round = r
-                        except json.JSONDecodeError:
-                            continue
-        except OSError:
-            pass
-
-        return last_round
+        return max(e.get("round", 0) for e in entries)
 
     # =========================================================================
     # Inspiration Operations
@@ -338,22 +377,6 @@ class MemoryManager:
         Get all timeline entries. Used by the web API for the timeline page.
 
         Returns:
-            All timeline entries, sorted by round.
+            All timeline entries, in chronological order.
         """
-        entries = []
-        if not os.path.exists(self.timeline_path):
-            return entries
-
-        try:
-            with open(self.timeline_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line:
-                        try:
-                            entries.append(json.loads(line))
-                        except json.JSONDecodeError:
-                            continue
-        except OSError:
-            pass
-
-        return entries
+        return self._read_all_from_dir(self.timeline_dir, self._legacy_timeline)

@@ -93,15 +93,34 @@
         '</span> ' +
         '<span class="text-xs text-muted">' + duration + '</span>';
 
+      // Build summary HTML: show first 3 lines, expandable
+      var summaryHtml = '';
+      if (summary) {
+        var lines = summary.split('\n').filter(function(l) { return l.trim(); });
+        if (lines.length <= 3) {
+          summaryHtml = '<pre class="timeline-summary">' + escapeHtml(summary) + '</pre>';
+        } else {
+          var previewText = lines.slice(0, 3).join('\n');
+          var fullText = summary;
+          var itemId = 'tl-summary-' + round;
+          summaryHtml =
+            '<pre class="timeline-summary" id="' + itemId + '">' + escapeHtml(previewText) + '</pre>' +
+            '<pre class="timeline-summary timeline-summary-full" id="' + itemId + '-full" style="display:none">' + escapeHtml(fullText) + '</pre>' +
+            '<a href="javascript:void(0)" class="timeline-toggle" onclick="toggleSummary(\'' + itemId + '\')">' +
+              '<span data-i18n="timeline.showMore">Show all ' + lines.length + ' lines</span>' +
+            '</a>';
+        }
+      } else {
+        summaryHtml = '<p class="text-muted">(no summary)</p>';
+      }
+
       item.innerHTML =
         '<div class="' + dotClass + '"></div>' +
         '<div class="timeline-content">' +
           '<div class="timeline-time">' +
             statsHtml + ' &mdash; ' + escapeHtml(time) +
           '</div>' +
-          '<div class="timeline-body">' +
-            (summary ? '<p>' + escapeHtml(summary) + '</p>' : '<p class="text-muted">(no summary)</p>') +
-          '</div>' +
+          '<div class="timeline-body">' + summaryHtml + '</div>' +
         '</div>';
 
       timelineEl.appendChild(item);
@@ -210,6 +229,27 @@
     if (type === 'error')                            return 'danger';
     return 'primary';
   }
+
+  /**
+   * Toggle between 3-line preview and full summary.
+   * @param {string} id - The preview element ID.
+   */
+  window.toggleSummary = function(id) {
+    var preview = document.getElementById(id);
+    var full = document.getElementById(id + '-full');
+    var link = preview ? preview.parentElement.querySelector('.timeline-toggle') : null;
+    if (!preview || !full) return;
+
+    if (full.style.display === 'none') {
+      preview.style.display = 'none';
+      full.style.display = '';
+      if (link) link.innerHTML = '<span data-i18n="timeline.showLess">Collapse</span>';
+    } else {
+      preview.style.display = '';
+      full.style.display = 'none';
+      if (link) link.innerHTML = '<span data-i18n="timeline.showMore">Show more</span>';
+    }
+  };
 
   function escapeHtml(str) {
     var div = document.createElement('div');

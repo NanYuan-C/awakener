@@ -1,0 +1,19 @@
+Split notebook/timeline into daily files and preserve full summaries
+
+Storage:
+- Notebook and timeline now write to per-day files under
+  data/notebook/YYYY-MM-DD.jsonl and data/timeline/YYYY-MM-DD.jsonl.
+- Reading scans all daily files (sorted by date) for full history.
+- Backward compatible: legacy single-file notebook.jsonl and
+  timeline.jsonl are still read if present.
+
+Timeline content:
+- Summary no longer truncated — full reasoning and output preserved.
+- Each assistant turn now includes a timestamp (HH:MM:SS) in the
+  summary, e.g. "[15:04:18] [Thinking] ..."
+
+Timeline UI:
+- Summary displayed as preformatted text with time prefixes.
+- Long summaries show first 3 lines with a "Show more" toggle
+  that expands to reveal the full content.
+- Added i18n keys for show/collapse labels (EN + ZH).

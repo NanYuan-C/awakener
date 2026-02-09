@@ -150,6 +150,8 @@ const messages = {
       tools_used: "tools used",
       duration: "duration",
       no_data: "No timeline data yet.",
+      showMore: "Show more",
+      showLess: "Collapse",
     },
 
     // -- Memory --
@@ -298,6 +300,8 @@ const messages = {
       tools_used: "工具调用",
       duration: "耗时",
       no_data: "暂无时间线数据。",
+      showMore: "展开全部",
+      showLess: "收起",
     },
 
     memory: {
