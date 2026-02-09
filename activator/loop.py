@@ -86,22 +86,33 @@ class ActivatorLogger:
         except OSError:
             pass
 
-    def _broadcast(self, msg_type: str, data: dict) -> None:
+    def _broadcast(self, msg_type: str, data: dict, wait: bool = True) -> None:
         """
-        Broadcast a message via WebSocket (non-blocking from sync context).
+        Broadcast a message via WebSocket from the activator thread.
 
-        Since the activator runs in a thread, we need to schedule the
-        async broadcast on the main event loop.
+        By default, this method waits for the broadcast to complete before
+        returning. This ensures messages arrive at the frontend in order
+        and with visible time separation (so they don't all appear at once).
+
+        Args:
+            msg_type: Message type string (e.g. "log", "tool_call").
+            data:     Message data dictionary.
+            wait:     If True (default), block until the broadcast is sent.
+                      Set to False for high-frequency streaming data.
         """
         if not self.ws_manager or not self._loop:
             return
 
         message = {"type": msg_type, "data": data}
         try:
-            asyncio.run_coroutine_threadsafe(
+            future = asyncio.run_coroutine_threadsafe(
                 self.ws_manager.broadcast(message),
                 self._loop,
             )
+            if wait:
+                # Block until the WebSocket send completes, so the next
+                # message is only queued after this one is delivered.
+                future.result(timeout=5)
         except Exception:
             pass
 
@@ -159,13 +170,47 @@ class ActivatorLogger:
         self._broadcast("log", {"text": line})
 
     def thought(self, text: str) -> None:
-        """Log the agent's text output (non-tool-call content)."""
+        """
+        Log the agent's complete text output (non-streaming fallback).
+
+        This is the original non-streaming path. When streaming is active,
+        use thought_chunk() + thought_done() instead.
+        """
         ts = self._timestamp()
         # Truncate very long thoughts for the log file
         preview = text[:1000] + ("..." if len(text) > 1000 else "")
         line = f"[{ts}] [THOUGHT] {preview}"
         self._write(line)
         self._broadcast("thought", {"text": text})
+
+    def thought_chunk(self, chunk: str) -> None:
+        """
+        Broadcast a streaming thought chunk to the frontend.
+
+        Uses fire-and-forget (wait=False) to avoid slowing down the
+        LLM stream processing. The frontend accumulates these chunks
+        into a live-updating thought line.
+
+        Args:
+            chunk: A small piece of thought text from the LLM stream.
+        """
+        self._broadcast("thought_chunk", {"text": chunk}, wait=False)
+
+    def thought_done(self, full_text: str) -> None:
+        """
+        Finalize a streaming thought: write to log file and notify frontend.
+
+        Called after the LLM stream completes. The frontend replaces the
+        live thought line with the final version.
+
+        Args:
+            full_text: The complete thought text.
+        """
+        ts = self._timestamp()
+        preview = full_text[:1000] + ("..." if len(full_text) > 1000 else "")
+        line = f"[{ts}] [THOUGHT] {preview}"
+        self._write(line)
+        self._broadcast("thought_done", {"text": full_text})
 
     def tool_call(self, name: str, args: dict) -> None:
         """Log a tool invocation."""

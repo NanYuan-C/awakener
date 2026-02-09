@@ -5,12 +5,14 @@ Manages WebSocket connections for real-time communication between
 the management console frontend and the activator backend.
 
 Message types (server -> client):
-    - "log"       : Real-time log line from the activator
-    - "status"    : Agent status change (running/stopped/waiting/error)
-    - "round"     : New activation round started or completed
-    - "thought"   : Agent's thinking/reasoning text
-    - "tool_call" : Tool invocation details
-    - "tool_result": Tool execution result
+    - "log"          : Real-time log line from the activator
+    - "status"       : Agent status change (running/stopped/waiting/error)
+    - "round"        : New activation round started or completed
+    - "thought"      : Agent's complete thought text (non-streaming fallback)
+    - "thought_chunk": Streaming thought delta (partial text as LLM generates)
+    - "thought_done" : Streaming thought finalized (complete text, ends stream)
+    - "tool_call"    : Tool invocation details
+    - "tool_result"  : Tool execution result
 
 Message format:
     {

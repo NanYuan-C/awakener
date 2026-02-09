@@ -743,6 +743,19 @@ select.form-control {
 .log-line.log-system  { color: #6c7086; }
 .log-line.log-round   { color: #cba6f7; font-weight: bold; }
 
+/* Streaming thought: blinking cursor effect */
+.log-line.live-thought {
+  color: #f9e2af;
+  border-left: 2px solid #f9e2af;
+  padding-left: 6px;
+  animation: thought-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes thought-pulse {
+  0%, 100% { border-left-color: #f9e2af; }
+  50%      { border-left-color: transparent; }
+}
+
 
 /* ==========================================================================
    7. Standalone Pages (Login / Setup)

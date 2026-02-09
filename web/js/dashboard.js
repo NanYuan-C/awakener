@@ -33,6 +33,8 @@
   let totalToolCalls = 0;
   let startTime = null;
   let uptimeTimer = null;
+  let liveThoughtEl = null;    // Currently streaming thought element
+  let liveThoughtText = '';    // Accumulated streaming thought content
 
   // -- WebSocket connection -------------------------------------------------
 
@@ -73,12 +75,14 @@
    * Handle a parsed WebSocket message from the server.
    *
    * Message types from activator (loop.py):
-   *   - "status"      : { status, next_in?, message? }
-   *   - "log"         : { text }
-   *   - "round"       : { step, event, tools_used?, duration?, notebook_saved? }
-   *   - "tool_call"   : { name, args }
-   *   - "tool_result" : { text }
-   *   - "thought"     : { text }
+   *   - "status"       : { status, next_in?, message? }
+   *   - "log"          : { text }
+   *   - "round"        : { step, event, tools_used?, duration?, notebook_saved? }
+   *   - "tool_call"    : { name, args }
+   *   - "tool_result"  : { text }
+   *   - "thought"      : { text }           (non-streaming fallback)
+   *   - "thought_chunk": { text }           (streaming: partial thought delta)
+   *   - "thought_done" : { text }           (streaming: final complete thought)
    *
    * @param {Object} msg - The parsed message object.
    */
@@ -119,8 +123,54 @@
         break;
 
       case 'thought':
+        // Non-streaming fallback (used if streaming is not active)
+        finalizeLiveThought();
         var thought = (d.text || '').substring(0, 500);
         appendLog('[THOUGHT] ' + thought, 'thought');
+        break;
+
+      case 'thought_chunk':
+        // Streaming thought: create or update the live thought element
+        if (!liveThoughtEl) {
+          liveThoughtEl = document.createElement('div');
+          liveThoughtEl.className = 'log-line log-thought live-thought';
+          liveThoughtText = '';
+          // Timestamp for when the thought started
+          var now = new Date();
+          var ts = String(now.getHours()).padStart(2, '0') + ':' +
+                   String(now.getMinutes()).padStart(2, '0') + ':' +
+                   String(now.getSeconds()).padStart(2, '0');
+          liveThoughtEl.dataset.prefix = '[' + ts + '] [THOUGHT] ';
+          liveThoughtEl.textContent = liveThoughtEl.dataset.prefix + '▊';
+          logBody.appendChild(liveThoughtEl);
+        }
+        liveThoughtText += (d.text || '');
+        // Show truncated preview with typing cursor
+        var preview = liveThoughtText.substring(0, 500);
+        liveThoughtEl.textContent = liveThoughtEl.dataset.prefix + preview + '▊';
+        // Auto-scroll
+        if (autoScroll.checked) {
+          logBody.scrollTop = logBody.scrollHeight;
+        }
+        break;
+
+      case 'thought_done':
+        // Finalize the streaming thought element
+        if (liveThoughtEl) {
+          var finalText = (d.text || liveThoughtText || '').substring(0, 500);
+          liveThoughtEl.textContent = liveThoughtEl.dataset.prefix + finalText;
+          liveThoughtEl.classList.remove('live-thought');
+          liveThoughtEl = null;
+          liveThoughtText = '';
+          // Auto-scroll
+          if (autoScroll.checked) {
+            logBody.scrollTop = logBody.scrollHeight;
+          }
+        } else {
+          // No live element, just append as regular thought
+          var doneText = (d.text || '').substring(0, 500);
+          appendLog('[THOUGHT] ' + doneText, 'thought');
+        }
         break;
 
       case 'log':
@@ -203,11 +253,29 @@
   // -- Log panel ------------------------------------------------------------
 
   /**
+   * Finalize any currently-streaming thought element.
+   * Called when a new message type arrives that means the thought is done.
+   */
+  function finalizeLiveThought() {
+    if (liveThoughtEl) {
+      var finalText = liveThoughtText.substring(0, 500);
+      liveThoughtEl.textContent = liveThoughtEl.dataset.prefix + finalText;
+      liveThoughtEl.classList.remove('live-thought');
+      liveThoughtEl = null;
+      liveThoughtText = '';
+    }
+  }
+
+  /**
    * Append a line to the log panel.
    * @param {string} text  - The log text.
    * @param {string} level - CSS class suffix: system, tool, result, thought, error, round.
    */
   function appendLog(text, level) {
+    // If there's a live thought and we're adding a non-chunk message, finalize it
+    if (liveThoughtEl && level !== 'thought') {
+      finalizeLiveThought();
+    }
     const line = document.createElement('div');
     line.className = 'log-line log-' + (level || 'system');
 

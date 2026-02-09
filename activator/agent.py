@@ -7,10 +7,18 @@ entry before the round ends.
 
 The round lifecycle:
     1. Build system + user messages (done by caller)
-    2. Enter the tool-calling loop
-    3. LLM returns tool_calls -> execute them -> feed results back
-    4. Repeat until LLM stops calling tools or budget exhausted
-    5. Extract round summary for timeline
+    2. Enter the tool-calling loop (streaming)
+    3. LLM streams response -> broadcast thoughts in real-time
+    4. Collect tool_calls from stream -> execute one by one
+    5. Repeat until LLM stops calling tools or budget exhausted
+    6. Extract round summary for timeline
+
+Streaming:
+    LLM responses are streamed (stream=True) so that:
+    - Agent thoughts appear on the dashboard in real-time
+    - Tool calls are broadcast before execution begins
+    - Tool results are broadcast immediately after execution
+    This eliminates the "everything appears at once" problem.
 
 Budget enforcement:
     - normal_limit: Max tool calls the agent can use freely
@@ -143,6 +151,75 @@ def _budget_hint(used: int, normal_limit: int, notebook_written: bool) -> str:
 
 
 # =============================================================================
+# Stream Processing Helper
+# =============================================================================
+
+def _consume_stream(
+    response,
+    logger=None,
+) -> tuple[str, str, dict[int, dict[str, str]]]:
+    """
+    Consume a streaming LLM response and collect the full message.
+
+    Processes stream chunks to:
+    - Broadcast thought text in real-time via logger.thought_chunk()
+    - Accumulate reasoning_content for thinking models
+    - Reconstruct tool_calls from streaming deltas
+
+    Args:
+        response: The streaming response iterator from litellm.completion().
+        logger:   Logger instance for real-time broadcasting (optional).
+
+    Returns:
+        Tuple of (content, reasoning, tool_calls_map) where:
+        - content: Full accumulated text content.
+        - reasoning: Full accumulated reasoning_content (or "").
+        - tool_calls_map: Dict mapping index -> {id, name, arguments}.
+    """
+    content = ""
+    reasoning = ""
+    tool_calls_map = {}  # index -> {"id": str, "name": str, "arguments": str}
+
+    for chunk in response:
+        if not chunk.choices:
+            continue
+
+        choice = chunk.choices[0]
+        delta = choice.delta
+
+        # -- Accumulate content and stream to frontend --
+        if hasattr(delta, "content") and delta.content:
+            content += delta.content
+            if logger:
+                logger.thought_chunk(delta.content)
+
+        # -- Accumulate reasoning (DeepSeek Reasoner) --
+        reasoning_delta = getattr(delta, "reasoning_content", None)
+        if reasoning_delta:
+            reasoning += reasoning_delta
+
+        # -- Accumulate tool call deltas --
+        if hasattr(delta, "tool_calls") and delta.tool_calls:
+            for tc_delta in delta.tool_calls:
+                idx = tc_delta.index
+                if idx not in tool_calls_map:
+                    tool_calls_map[idx] = {"id": "", "name": "", "arguments": ""}
+                if tc_delta.id:
+                    tool_calls_map[idx]["id"] = tc_delta.id
+                if tc_delta.function:
+                    if tc_delta.function.name:
+                        tool_calls_map[idx]["name"] = tc_delta.function.name
+                    if tc_delta.function.arguments:
+                        tool_calls_map[idx]["arguments"] += tc_delta.function.arguments
+
+        # Check for stream end
+        if choice.finish_reason:
+            break
+
+    return content, reasoning, tool_calls_map
+
+
+# =============================================================================
 # Main Round Logic
 # =============================================================================
 
@@ -155,11 +232,18 @@ def run_round(
     logger=None,
 ) -> RoundResult:
     """
-    Execute one activation round: LLM <-> tool loop.
+    Execute one activation round: LLM <-> tool loop with streaming.
 
     This function takes the pre-built messages (system + user) and runs
     the tool-calling loop until the LLM stops, the budget is exhausted,
     or an error occurs.
+
+    The LLM is called with stream=True so that:
+    - Thought content is broadcast to the dashboard in real-time
+    - Tool calls appear before their execution begins
+    - Tool results appear immediately after execution completes
+    This provides a much better observation experience compared to
+    waiting for the entire response before displaying anything.
 
     Args:
         messages:       Initial messages list [system_msg, user_msg].
@@ -168,7 +252,7 @@ def run_round(
         api_key:        Optional API key override.
         normal_limit:   Normal tool budget per round.
         logger:         Logger callback object (must have info, tool_call,
-                        tool_result, thought methods).
+                        tool_result, thought_chunk, thought_done methods).
 
     Returns:
         RoundResult with tools_used, notebook_saved, summary, and error.
@@ -177,7 +261,11 @@ def run_round(
     hard_limit = normal_limit + 5  # Extra buffer for forced notebook write
 
     while total_tool_calls < hard_limit:
-        # -- Call LLM via LiteLLM --
+        # -- Notify dashboard that LLM is being called --
+        if logger:
+            logger.info("[LLM] Calling model...")
+
+        # -- Call LLM via LiteLLM (streaming) --
         try:
             response = litellm.completion(
                 model=model,
@@ -185,6 +273,7 @@ def run_round(
                 tools=TOOLS_SCHEMA,
                 tool_choice="auto",
                 api_key=api_key,
+                stream=True,
             )
         except Exception as e:
             error_msg = f"LLM API error: {type(e).__name__}: {e}"
@@ -197,55 +286,69 @@ def run_round(
                 error=error_msg,
             )
 
-        message = response.choices[0].message
-        reasoning = getattr(message, "reasoning_content", None)
+        # -- Process the stream --
+        try:
+            content, reasoning, tool_calls_map = _consume_stream(response, logger)
+        except Exception as e:
+            error_msg = f"Stream error: {type(e).__name__}: {e}"
+            if logger:
+                logger.info(f"[ERROR] {error_msg}")
+            return RoundResult(
+                tools_used=total_tool_calls,
+                notebook_saved=tool_executor.notebook_written,
+                summary=_extract_summary(messages),
+                error=error_msg,
+            )
+
+        # -- Finalize thought display --
+        if content and logger:
+            logger.thought_done(content)
 
         # Log reasoning (for thinking models like DeepSeek Reasoner)
         if reasoning and logger:
             preview = reasoning[:500] + ("..." if len(reasoning) > 500 else "")
             logger.info(f"[REASONING] {preview}")
 
-        # Log the agent's text output
-        if message.content and logger:
-            logger.thought(message.content)
-
         # -- No tool calls: round ends naturally --
-        if not message.tool_calls:
-            assistant_msg = {"role": "assistant", "content": message.content or ""}
+        if not tool_calls_map:
+            assistant_msg = {"role": "assistant", "content": content or ""}
             if reasoning:
                 assistant_msg["reasoning_content"] = reasoning
             messages.append(assistant_msg)
             break
 
         # -- Build assistant message with tool calls --
-        assistant_msg = {"role": "assistant", "content": message.content or ""}
+        assistant_msg = {"role": "assistant", "content": content or ""}
         if reasoning:
             assistant_msg["reasoning_content"] = reasoning
-        assistant_msg["tool_calls"] = [
-            {
-                "id": tc.id,
+
+        tool_calls_list = []
+        for idx in sorted(tool_calls_map.keys()):
+            tc = tool_calls_map[idx]
+            tool_calls_list.append({
+                "id": tc["id"],
                 "type": "function",
                 "function": {
-                    "name": tc.function.name,
-                    "arguments": tc.function.arguments,
+                    "name": tc["name"],
+                    "arguments": tc["arguments"],
                 },
-            }
-            for tc in message.tool_calls
-        ]
+            })
+
+        assistant_msg["tool_calls"] = tool_calls_list
         messages.append(assistant_msg)
 
-        # -- Execute each tool call --
-        for tool_call in message.tool_calls:
-            func_name = tool_call.function.name
-            call_id = tool_call.id
+        # -- Execute each tool call (one by one, with sync broadcasts) --
+        for tc_data in tool_calls_list:
+            func_name = tc_data["function"]["name"]
+            call_id = tc_data["id"]
 
             # Parse arguments
             try:
-                args = json.loads(tool_call.function.arguments)
+                args = json.loads(tc_data["function"]["arguments"])
             except json.JSONDecodeError:
                 args = {}
                 if logger:
-                    logger.tool_call(func_name, {"_raw": tool_call.function.arguments})
+                    logger.tool_call(func_name, {"_raw": tc_data["function"]["arguments"]})
                 result = "(error: failed to parse tool arguments as JSON)"
                 total_tool_calls += 1
                 hint = _budget_hint(total_tool_calls, normal_limit, tool_executor.notebook_written)
