@@ -31,10 +31,107 @@ DeepSeek reasoner support:
 """
 
 import json
+import re
 from datetime import datetime
 
 import litellm
 from activator.tools import ToolExecutor, TOOLS_SCHEMA
+
+
+# =============================================================================
+# JSON Repair for LLM Tool Arguments
+# =============================================================================
+
+def _repair_json(raw: str) -> dict | None:
+    """
+    Attempt to repair broken JSON from LLM tool-call arguments.
+
+    LLMs often produce invalid JSON when generating large payloads
+    (e.g. writing a full CSS/HTML file). Common failure modes:
+
+    1. Truncated output (missing closing quotes/braces)
+    2. Unescaped control characters inside strings
+    3. Invalid escape sequences (e.g. \\x, \\0)
+
+    This function tries progressively more aggressive repairs.
+
+    Args:
+        raw: The raw JSON string that failed json.loads().
+
+    Returns:
+        Parsed dict if repair succeeded, None if all attempts failed.
+    """
+    if not raw or not raw.strip():
+        return None
+
+    # -- Attempt 1: Fix invalid escape sequences --
+    # Replace common bad escapes: \x, \0, \a, etc. with their literal chars
+    fixed = re.sub(r'\\([^"\\/bfnrtu])', r'\1', raw)
+    try:
+        return json.loads(fixed)
+    except json.JSONDecodeError:
+        pass
+
+    # -- Attempt 2: Close truncated JSON --
+    # The LLM often gets cut off mid-string, leaving unclosed quotes/braces.
+    # Strategy: close any open string, then close open braces.
+    repaired = fixed.rstrip()
+
+    # If we're inside an unclosed string, close it
+    # Count unescaped quotes
+    in_string = False
+    i = 0
+    while i < len(repaired):
+        c = repaired[i]
+        if c == '\\' and in_string:
+            i += 2  # Skip escaped char
+            continue
+        if c == '"':
+            in_string = not in_string
+        i += 1
+
+    if in_string:
+        repaired += '"'
+
+    # Close any unclosed braces/brackets
+    open_braces = repaired.count('{') - repaired.count('}')
+    open_brackets = repaired.count('[') - repaired.count(']')
+
+    repaired += ']' * max(0, open_brackets)
+    repaired += '}' * max(0, open_braces)
+
+    try:
+        return json.loads(repaired)
+    except json.JSONDecodeError:
+        pass
+
+    # -- Attempt 3: Extract key fields with regex --
+    # Last resort for write_file: extract path and content directly
+    path_match = re.search(r'"path"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+    content_match = re.search(r'"content"\s*:\s*"((?:[^"\\]|\\.)*)', raw)
+    append_match = re.search(r'"append"\s*:\s*(true|false)', raw)
+
+    if path_match and content_match:
+        result = {
+            "path": path_match.group(1).encode().decode('unicode_escape', errors='replace'),
+            "content": content_match.group(1).encode().decode('unicode_escape', errors='replace'),
+        }
+        if append_match:
+            result["append"] = append_match.group(1) == "true"
+        return result
+
+    # For other tools: try extracting "command" field
+    cmd_match = re.search(r'"command"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+    if cmd_match:
+        return {"command": cmd_match.group(1).encode().decode('unicode_escape', errors='replace')}
+
+    # For notebook_write: try extracting "content" field
+    if content_match and not path_match:
+        return {
+            "content": content_match.group(1).encode().decode('unicode_escape', errors='replace'),
+        }
+
+    return None
 
 
 # =============================================================================
@@ -400,24 +497,36 @@ def run_round(
             func_name = tc_data["function"]["name"]
             call_id = tc_data["id"]
 
-            # Parse arguments
+            # Parse arguments (with JSON repair fallback)
+            raw_args = tc_data["function"]["arguments"]
             try:
-                args = json.loads(tc_data["function"]["arguments"])
+                args = json.loads(raw_args)
             except json.JSONDecodeError:
-                args = {}
-                if logger:
-                    logger.tool_call(func_name, {"_raw": tc_data["function"]["arguments"]})
-                result = "(error: failed to parse tool arguments as JSON)"
-                total_tool_calls += 1
-                hint = _budget_hint(total_tool_calls, normal_limit, tool_executor.notebook_written)
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": call_id,
-                    "content": f"{hint}\n\n{result}",
-                })
-                if logger:
-                    logger.tool_result(result)
-                continue
+                # LLM produced invalid JSON — attempt repair
+                repaired = _repair_json(raw_args)
+                if repaired is not None:
+                    args = repaired
+                    if logger:
+                        logger.info(f"[JSON-REPAIR] Repaired arguments for {func_name}")
+                else:
+                    args = {}
+                    if logger:
+                        logger.tool_call(func_name, {"_raw": raw_args[:200]})
+                    result = (
+                        "(error: failed to parse tool arguments as JSON. "
+                        "Tip: for large files, try writing smaller sections "
+                        "or use shell_execute with 'cat << EOF > file')"
+                    )
+                    total_tool_calls += 1
+                    hint = _budget_hint(total_tool_calls, normal_limit, tool_executor.notebook_written)
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "content": f"{hint}\n\n{result}",
+                    })
+                    if logger:
+                        logger.tool_result(result)
+                    continue
 
             if logger:
                 logger.tool_call(func_name, args)
