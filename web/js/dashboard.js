@@ -388,13 +388,23 @@
       await api.post('/api/agent/inspiration', { message: message });
       toast('Inspiration sent to agent', 'success');
       input.value = '';
+      if (btnSendInspiration) btnSendInspiration.disabled = true;
     } catch (err) {
       toast(err.message, 'error');
     }
   };
 
-  // -- Handle Enter key in inspiration input ----------------------------------
-  document.getElementById('inspiration-input').addEventListener('keypress', function(e) {
+  // -- Inspiration input handling -----------------------------------------------
+  var inspirationInput = document.getElementById('inspiration-input');
+  var btnSendInspiration = document.getElementById('btn-send-inspiration');
+
+  // Enable/disable send button based on input content
+  inspirationInput.addEventListener('input', function() {
+    btnSendInspiration.disabled = !this.value.trim();
+  });
+
+  // Send on Enter key
+  inspirationInput.addEventListener('keypress', function(e) {
     if (e.key === 'Enter') {
       window.sendInspiration();
     }

@@ -410,10 +410,16 @@ function getAvailableLocales() {
  */
 function apply() {
   // Translate text content
+  // Use innerHTML when the translation contains HTML tags, textContent otherwise
   document.querySelectorAll("[data-i18n]").forEach(function(el) {
     var key = el.getAttribute("data-i18n");
     if (key) {
-      el.textContent = t(key);
+      var text = t(key);
+      if (/<[a-z][\s\S]*>/i.test(text)) {
+        el.innerHTML = text;
+      } else {
+        el.textContent = text;
+      }
     }
   });
 

@@ -85,7 +85,7 @@
         placeholder="Send an inspiration to the agent..."
         data-i18n-placeholder="dashboard.inspirationPlaceholder"
       >
-      <button class="btn btn-sm btn-primary" onclick="sendInspiration()">
+      <button class="btn btn-sm btn-primary" id="btn-send-inspiration" onclick="sendInspiration()" disabled>
         <span data-i18n="dashboard.send">Send</span>
       </button>
       <button class="btn btn-sm btn-icon btn-outline inspiration-help-btn" onclick="document.getElementById('inspiration-modal').style.display='flex'" title="What is inspiration?">
