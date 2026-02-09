@@ -1,6 +1,0 @@
-Fix modal HTML rendering and disable empty inspiration send
-
-- i18n apply() now uses innerHTML when translation contains HTML tags,
-  fixing raw <strong> tags showing in the inspiration help modal.
-- Inspiration send button starts disabled and only enables when the
-  input has non-empty text; re-disables after successful send.
