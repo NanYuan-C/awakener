@@ -975,55 +975,62 @@ select.form-control {
   max-height: none;              /* override the default 500px limit */
 }
 
-/* -- Footer (auto-scroll + inspiration input) ----------------------------- */
+/* -- Toolbar: auto-scroll toggle ------------------------------------------ */
+
+.toolbar-autoscroll {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-light);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toolbar-autoscroll input[type="checkbox"] {
+  accent-color: var(--color-primary);
+}
+
+/* -- Footer (inspiration input) ------------------------------------------- */
 
 .log-footer {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-md);
-  background: #1e1e2e;          /* match log panel background */
-  border-top: 1px solid rgba(255,255,255,0.1);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
   flex-shrink: 0;
-}
-
-.log-footer-autoscroll {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-  color: #9399b2;
-  font-size: var(--font-size-sm);
-  white-space: nowrap;
-  cursor: pointer;
-  flex-shrink: 0;
-  user-select: none;
-}
-
-.log-footer-autoscroll input[type="checkbox"] {
-  accent-color: var(--color-primary);
 }
 
 .log-footer-inspiration {
   display: flex;
   flex: 1;
+  align-items: center;
   gap: var(--spacing-sm);
   min-width: 0;
 }
 
 .log-footer-inspiration .form-control {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(255,255,255,0.15);
-  color: #cdd6f4;
   font-size: var(--font-size-sm);
 }
 
-.log-footer-inspiration .form-control::placeholder {
-  color: #6c7086;
+/* Help button and hint text */
+.inspiration-help-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+  padding: 0;
+  border-radius: var(--radius-full);
 }
 
-.log-footer-inspiration .form-control:focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
+.inspiration-hint {
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 
@@ -1331,12 +1338,12 @@ select.form-control {
     flex-wrap: wrap;
   }
 
-  .log-footer {
+  .log-footer-inspiration {
     flex-wrap: wrap;
   }
 
-  .log-footer-inspiration {
-    flex: 1 1 100%;
+  .inspiration-hint {
+    display: none;
   }
 }
 

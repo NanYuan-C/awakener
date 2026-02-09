@@ -23,10 +23,6 @@
   const statUptime   = document.getElementById('stat-uptime');
   const btnStart       = document.getElementById('btn-start');
   const btnStop        = document.getElementById('btn-stop');
-  const btnRestart     = document.getElementById('btn-restart');
-  const statusBadge    = document.getElementById('agent-status');       // topbar badge
-  const statusText     = document.getElementById('agent-status-text');  // topbar text
-  const statusDot      = statusBadge ? statusBadge.querySelector('.status-dot') : null;
   const toolbarStatus  = document.getElementById('toolbar-status');     // dashboard toolbar badge
 
   // -- State ----------------------------------------------------------------
@@ -215,26 +211,17 @@
     // Support both WS format (status) and REST format (state)
     const status = data.status || data.state || 'idle';
 
-    // Update topbar badge
-    if (statusBadge) statusBadge.className = 'agent-status ' + status;
-    if (statusText) statusText.textContent = status.charAt(0).toUpperCase() + status.slice(1);
-
-    // Update toolbar badge (dashboard inline)
-    if (toolbarStatus) toolbarStatus.className = 'agent-status ' + status;
+    // Update toolbar badge
+    if (toolbarStatus) {
+      toolbarStatus.className = 'agent-status ' + status;
+      var tbDot = toolbarStatus.querySelector('.status-dot');
+      if (tbDot) tbDot.classList.toggle('pulse', status === 'running');
+    }
     statStatus.textContent = status.charAt(0).toUpperCase() + status.slice(1);
 
     // Show waiting info
     if (status === 'waiting' && data.next_in) {
       statStatus.textContent = 'Waiting (' + data.next_in + 's)';
-    }
-
-    // Pulse animation for running (both topbar and toolbar dots)
-    if (statusDot) {
-      statusDot.classList.toggle('pulse', status === 'running');
-    }
-    if (toolbarStatus) {
-      var tbDot = toolbarStatus.querySelector('.status-dot');
-      if (tbDot) tbDot.classList.toggle('pulse', status === 'running');
     }
 
     // Update round (WS sends 'round', REST sends 'current_round' or 'current_step')
@@ -247,7 +234,6 @@
     const isActive = (status === 'running' || status === 'waiting' || status === 'stopping');
     btnStart.disabled = isActive;
     btnStop.disabled = !isActive;
-    btnRestart.disabled = !isActive;
 
     // Uptime tracking
     if (isActive && !startTime) {

@@ -50,15 +50,17 @@
       </span>
     </div>
     <div class="log-toolbar-right">
-      <button class="btn btn-sm btn-success" id="btn-start" onclick="agentAction('start')">
-        &#x25B6; <span data-i18n="dashboard.start">Start</span>
+      <button class="btn btn-sm btn-icon btn-success" id="btn-start" onclick="agentAction('start')" title="Start">
+        &#x25B6;
       </button>
-      <button class="btn btn-sm btn-danger" id="btn-stop" onclick="agentAction('stop')" disabled>
-        &#x23F9; <span data-i18n="dashboard.stop">Stop</span>
+      <button class="btn btn-sm btn-icon btn-danger" id="btn-stop" onclick="agentAction('stop')" disabled title="Stop">
+        &#x23F9;
       </button>
-      <button class="btn btn-sm btn-warning" id="btn-restart" onclick="agentAction('restart')" disabled>
-        &#x1F504; <span data-i18n="dashboard.restart">Restart</span>
-      </button>
+      <span class="toolbar-sep"></span>
+      <label class="toolbar-autoscroll">
+        <input type="checkbox" id="auto-scroll" checked>
+        <span data-i18n="dashboard.autoScroll">Auto-scroll</span>
+      </label>
     </div>
   </div>
 
@@ -72,13 +74,9 @@
   </div>
 
   <!-- ================================================================== -->
-  <!-- Footer: auto-scroll + inspiration                                   -->
+  <!-- Footer: inspiration input                                           -->
   <!-- ================================================================== -->
   <div class="log-footer">
-    <label class="log-footer-autoscroll">
-      <input type="checkbox" id="auto-scroll" checked>
-      <span data-i18n="dashboard.autoScroll">Auto-scroll</span>
-    </label>
     <div class="log-footer-inspiration">
       <input
         type="text"
@@ -90,6 +88,39 @@
       <button class="btn btn-sm btn-primary" onclick="sendInspiration()">
         <span data-i18n="dashboard.send">Send</span>
       </button>
+      <button class="btn btn-sm btn-icon btn-outline inspiration-help-btn" onclick="document.getElementById('inspiration-modal').style.display='flex'" title="What is inspiration?">
+        &#x2753;
+      </button>
+      <span class="inspiration-hint text-muted text-sm" data-i18n="dashboard.inspirationHint">Not a chat — it's a nudge for the next round</span>
+    </div>
+  </div>
+
+  <!-- Inspiration help modal -->
+  <div class="modal-overlay" id="inspiration-modal" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 data-i18n="dashboard.inspirationTitle">What is Inspiration?</h3>
+        <button class="modal-close" onclick="document.getElementById('inspiration-modal').style.display='none'">&times;</button>
+      </div>
+      <div class="modal-body" style="font-size:var(--font-size-sm);line-height:1.75;color:var(--color-text);">
+        <p data-i18n="dashboard.inspirationDesc1">
+          Inspiration is <strong>not</strong> a conversation with the agent. The agent cannot reply to you here.
+        </p>
+        <p style="margin-top:12px" data-i18n="dashboard.inspirationDesc2">
+          It is a one-way message that the agent will see as a "spark of inspiration" at the beginning of its <strong>next activation round</strong>. Use it to gently steer the agent's direction — for example:
+        </p>
+        <ul style="margin:12px 0 0 20px;color:var(--color-text-light)">
+          <li data-i18n="dashboard.inspirationEx1">"Try organizing your notes today"</li>
+          <li data-i18n="dashboard.inspirationEx2">"Explore something creative"</li>
+          <li data-i18n="dashboard.inspirationEx3">"Review yesterday's work and reflect"</li>
+        </ul>
+        <p style="margin-top:12px" data-i18n="dashboard.inspirationDesc3">
+          The agent will incorporate this inspiration into its own thinking and decide how to act on it autonomously.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="document.getElementById('inspiration-modal').style.display='none'" data-i18n="dashboard.understood">Got it</button>
+      </div>
     </div>
   </div>
 </div>
