@@ -25,6 +25,7 @@ Logging:
 
 import os
 import time
+import gc
 import asyncio
 import threading
 from datetime import datetime, timezone
@@ -461,6 +462,10 @@ def run_activation_loop(
 
         # Advance round counter
         round_num += 1
+
+        # -- Explicit memory cleanup --
+        del messages, system_msg, user_msg, tool_exec, result
+        gc.collect()
 
         # -- Wait for interval (or stop_event) --
         if interval > 0 and not stop_event.is_set():
