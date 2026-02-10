@@ -379,6 +379,173 @@ class MemoryManager:
     # Bulk Read (for web API)
     # =========================================================================
 
+    # =========================================================================
+    # Delete Operations (for web API)
+    # =========================================================================
+
+    def _delete_round_from_dir(self, directory: str, round_num: int, legacy_path: str | None = None) -> bool:
+        """
+        Delete all entries for a given round from JSONL files in a directory.
+
+        Scans all .jsonl files (including legacy single-file), removes matching
+        entries, and rewrites the files. Empty files are deleted.
+
+        Args:
+            directory:   Path to the per-day JSONL directory.
+            round_num:   The round number to delete.
+            legacy_path: Optional legacy single-file path.
+
+        Returns:
+            True if at least one entry was deleted.
+        """
+        found = False
+
+        # Collect all files to check
+        files_to_check = []
+        if legacy_path and os.path.exists(legacy_path):
+            files_to_check.append(legacy_path)
+
+        import glob as glob_mod
+        pattern = os.path.join(directory, "*.jsonl")
+        files_to_check.extend(sorted(glob_mod.glob(pattern)))
+
+        for filepath in files_to_check:
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    lines = f.readlines()
+
+                new_lines = []
+                for line in lines:
+                    line_stripped = line.strip()
+                    if not line_stripped:
+                        continue
+                    try:
+                        entry = json.loads(line_stripped)
+                        if entry.get("round") == round_num:
+                            found = True
+                            continue  # Skip this entry (delete it)
+                    except json.JSONDecodeError:
+                        pass
+                    new_lines.append(line)
+
+                if found:
+                    if new_lines:
+                        with open(filepath, "w", encoding="utf-8") as f:
+                            f.writelines(new_lines)
+                    else:
+                        # File is now empty, remove it
+                        os.remove(filepath)
+            except OSError:
+                continue
+
+        return found
+
+    def delete_round(self, round_num: int) -> dict:
+        """
+        Cascade-delete all data for a given round: timeline, notebook, and logs.
+
+        This is the main entry point for the web API delete operation.
+        Deleting from the timeline page removes all associated data so
+        the agent won't see stale entries on next startup.
+
+        Args:
+            round_num: The round number to delete.
+
+        Returns:
+            Dict with keys 'timeline', 'notebook', 'logs' indicating
+            whether each type of data was found and deleted.
+        """
+        result = {
+            "timeline": self._delete_round_from_dir(
+                self.timeline_dir, round_num, self._legacy_timeline
+            ),
+            "notebook": self._delete_round_from_dir(
+                self.notebook_dir, round_num, self._legacy_notebook
+            ),
+            "logs": self._delete_round_from_logs(round_num),
+        }
+        # Invalidate notebook cache
+        self._notebook_cache = None
+        return result
+
+    def _delete_round_from_logs(self, round_num: int) -> bool:
+        """
+        Delete log entries for a specific round from per-day log files.
+
+        Log files use round separators like:
+            ==================================================
+            Round 7 | 2026-02-10 21:35:23
+            ==================================================
+
+        Everything from one separator to the next belongs to that round.
+
+        Args:
+            round_num: The round number whose log section to remove.
+
+        Returns:
+            True if log entries were found and deleted.
+        """
+        import re
+
+        log_dir = os.path.join(self.data_dir, "logs")
+        if not os.path.isdir(log_dir):
+            return False
+
+        found = False
+        # Round separator pattern: line starting with "Round N |"
+        separator = re.compile(r"^={10,}$")
+        round_header = re.compile(rf"^Round\s+{round_num}\s+\|")
+
+        for filename in sorted(os.listdir(log_dir)):
+            if not filename.endswith(".log"):
+                continue
+
+            filepath = os.path.join(log_dir, filename)
+            try:
+                with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+                    lines = f.readlines()
+            except OSError:
+                continue
+
+            # Find and remove the round's section
+            new_lines = []
+            skip = False
+            i = 0
+
+            while i < len(lines):
+                line = lines[i]
+
+                # Check if this is a separator + round header block
+                if separator.match(line.strip()) and i + 1 < len(lines):
+                    next_line = lines[i + 1]
+                    if round_header.match(next_line.strip()):
+                        # This is the target round — skip until next separator block
+                        found = True
+                        skip = True
+                        i += 1  # Skip the separator line
+                        continue
+
+                    if skip:
+                        # We hit the NEXT round's separator — stop skipping
+                        skip = False
+
+                if not skip:
+                    new_lines.append(line)
+                i += 1
+
+            if found:
+                if any(l.strip() for l in new_lines):
+                    with open(filepath, "w", encoding="utf-8") as f:
+                        f.writelines(new_lines)
+                else:
+                    os.remove(filepath)
+
+        return found
+
+    # =========================================================================
+    # Bulk Read (for web API)
+    # =========================================================================
+
     def get_all_notebook_entries(self) -> list[dict]:
         """
         Get all notebook entries. Used by the web API for the memory page.

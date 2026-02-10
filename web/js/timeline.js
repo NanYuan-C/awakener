@@ -115,8 +115,11 @@
       item.innerHTML =
         '<div class="' + dotClass + '"></div>' +
         '<div class="timeline-content">' +
-          '<div class="timeline-time">' +
-            statsHtml + ' &mdash; ' + escapeHtml(time) +
+          '<div class="timeline-time flex flex-between flex-center">' +
+            '<div>' + statsHtml + ' &mdash; ' + escapeHtml(time) + '</div>' +
+            '<button class="btn btn-sm btn-danger" onclick="deleteTimelineEntry(' + round + ')" title="Delete">' +
+              '&#x1F5D1;' +
+            '</button>' +
           '</div>' +
           '<div class="timeline-body">' + summaryHtml + '</div>' +
         '</div>';
@@ -222,6 +225,22 @@
       preview.style.display = '';
       full.style.display = 'none';
       if (link) link.innerHTML = '<span data-i18n="timeline.showMore">Show more</span>';
+    }
+  };
+
+  /**
+   * Delete a timeline entry by round number.
+   * @param {number} round - The round number to delete.
+   */
+  window.deleteTimelineEntry = async function(round) {
+    if (!confirm('Delete Round ' + round + '?\nThis will also remove the notebook entry and log for this round.')) return;
+
+    try {
+      await api.delete('/api/timeline/' + round);
+      toast('Round ' + round + ' deleted', 'success');
+      loadTimeline();
+    } catch (e) {
+      toast('Failed to delete: ' + e.message, 'error');
     }
   };
 

@@ -615,6 +615,27 @@ def create_router(
     # MEMORY ROUTES - Requires authentication
     # =========================================================================
 
+    @router.delete("/timeline/{round_num}", dependencies=[auth])
+    async def delete_round(round_num: int):
+        """
+        Cascade-delete all data for a given round.
+        Removes the timeline entry, notebook entry, and log section
+        for the specified round number.
+        """
+        from activator.memory import MemoryManager
+
+        data_dir = os.path.join(config_manager.project_dir, "data")
+        memory = MemoryManager(data_dir)
+        result = memory.delete_round(round_num)
+
+        if not any(result.values()):
+            raise HTTPException(status_code=404, detail=f"No data found for round {round_num}")
+
+        return {
+            "message": f"Round {round_num} deleted",
+            "deleted": result,
+        }
+
     @router.get("/memory/notebook", dependencies=[auth])
     async def get_memory_notebook(
         offset: int = Query(0, ge=0, description="Offset for pagination"),
