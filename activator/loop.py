@@ -244,8 +244,9 @@ class ActivatorLogger:
 
         Used for real-time progress updates (e.g. streaming argument size)
         that change too frequently to be logged.
+        Uses fire-and-forget (wait=False) to avoid blocking stream processing.
         """
-        self._broadcast("loading_update", {"text": text})
+        self._broadcast("loading_update", {"text": text}, wait=False)
 
     def tool_call(self, name: str, args: dict) -> None:
         """Log a tool invocation."""
