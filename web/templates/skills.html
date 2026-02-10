@@ -19,10 +19,19 @@
       Skills extend the agent's capabilities with structured instructions and scripts.
     </span>
   </div>
-  <button class="btn btn-primary" onclick="showCreateModal()">
-    + <span data-i18n="skills.create">New Skill</span>
-  </button>
+  <div class="flex gap-sm">
+    <button class="btn btn-outline" onclick="triggerUpload()">
+      &#x1F4C2; <span data-i18n="skills.upload">Upload Folder</span>
+    </button>
+    <button class="btn btn-primary" onclick="showCreateModal()">
+      + <span data-i18n="skills.create">New Skill</span>
+    </button>
+  </div>
 </div>
+
+<!-- Hidden folder input for upload -->
+<input type="file" id="folder-input" webkitdirectory directory multiple
+       style="display:none" onchange="handleFolderUpload(this)">
 
 <!-- Skills grid -->
 <div class="skill-list" id="skill-list">

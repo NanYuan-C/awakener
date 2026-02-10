@@ -75,6 +75,16 @@ class PromptContentRequest(BaseModel):
     """Create or update a persona prompt."""
     content: str = Field(..., description="Prompt content in Markdown")
 
+class SkillUploadFile(BaseModel):
+    """A single file within a skill upload."""
+    path: str = Field(..., description="Relative path within the skill directory")
+    content: str = Field(..., description="File content (text)")
+
+class SkillUploadRequest(BaseModel):
+    """Upload a complete skill directory."""
+    name: str = Field(..., description="Skill directory name")
+    files: list[SkillUploadFile] = Field(..., min_length=1)
+
 
 # =============================================================================
 # Router Factory
@@ -402,6 +412,120 @@ def create_router(
             f.write(req.content)
 
         return {"message": f"Skill '{name}' saved"}
+
+    @router.post("/skills/upload", dependencies=[auth])
+    async def upload_skill(req: SkillUploadRequest):
+        """
+        Upload a complete skill directory (multiple files).
+
+        Validates:
+        - Name uses valid characters (lowercase, digits, hyphens)
+        - No skill with the same name already exists
+        - A SKILL.md file is included
+        - SKILL.md frontmatter contains 'name' and 'description'
+
+        All files are written to data/skills/<name>/.
+        """
+        from activator.tools import _parse_skill_frontmatter
+
+        name = req.name.strip()
+
+        # Validate name format
+        if not name or not all(
+            c.isalnum() or c == '-' for c in name
+        ) or not name[0].isalnum():
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid skill name. Use lowercase letters, digits, and hyphens.",
+            )
+
+        skills_dir = os.path.join(config_manager.project_dir, "data", "skills")
+        skill_path = os.path.join(skills_dir, name)
+
+        # Check for duplicate
+        if os.path.isdir(skill_path):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Skill '{name}' already exists. Delete it first or choose a different name.",
+            )
+
+        # Check SKILL.md is present
+        skill_md_file = None
+        for f in req.files:
+            normalized = f.path.replace("\\", "/")
+            if normalized == "SKILL.md" or normalized.endswith("/SKILL.md"):
+                skill_md_file = f
+                break
+
+        if not skill_md_file:
+            raise HTTPException(
+                status_code=400,
+                detail="SKILL.md file is required but not found in the upload.",
+            )
+
+        # Validate frontmatter has name and description
+        content = skill_md_file.content
+        if not content.startswith("---"):
+            raise HTTPException(
+                status_code=400,
+                detail="SKILL.md must start with YAML frontmatter (--- delimiter).",
+            )
+
+        end = content.find("---", 3)
+        if end == -1:
+            raise HTTPException(
+                status_code=400,
+                detail="SKILL.md frontmatter is not properly closed (missing closing ---).",
+            )
+
+        import yaml
+        try:
+            frontmatter = yaml.safe_load(content[3:end].strip()) or {}
+        except yaml.YAMLError:
+            raise HTTPException(
+                status_code=400,
+                detail="SKILL.md frontmatter contains invalid YAML.",
+            )
+
+        if not frontmatter.get("name"):
+            raise HTTPException(
+                status_code=400,
+                detail="SKILL.md frontmatter must contain a 'name' field.",
+            )
+
+        if not frontmatter.get("description"):
+            raise HTTPException(
+                status_code=400,
+                detail="SKILL.md frontmatter must contain a 'description' field.",
+            )
+
+        # Write all files
+        os.makedirs(skill_path, exist_ok=True)
+        file_count = 0
+
+        for f in req.files:
+            # Normalize path separators and prevent traversal
+            rel_path = f.path.replace("\\", "/")
+            if ".." in rel_path:
+                continue
+
+            target = os.path.join(skill_path, rel_path)
+            target_real = os.path.realpath(target)
+            skill_real = os.path.realpath(skill_path)
+
+            if not target_real.startswith(skill_real + os.sep) and target_real != skill_real:
+                continue  # Skip files that would escape the skill directory
+
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, "w", encoding="utf-8") as fh:
+                fh.write(f.content)
+            file_count += 1
+
+        return {
+            "message": f"Skill '{name}' uploaded successfully",
+            "name": name,
+            "files": file_count,
+        }
 
     @router.put("/skills/{name}/toggle", dependencies=[auth])
     async def toggle_skill(name: str):

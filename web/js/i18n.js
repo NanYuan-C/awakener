@@ -161,6 +161,14 @@ const messages = {
       no_data: "No skills installed. Create one to get started.",
       references: "References",
       scripts: "Scripts",
+      upload: "Upload Folder",
+      uploadSuccess: "Skill \"{name}\" uploaded ({count} files)",
+      uploadError: "Failed to read the selected folder",
+      uploadDuplicate: "Skill \"{name}\" already exists. Delete it first or rename the folder.",
+      uploadNoSkillMd: "SKILL.md file not found in the selected folder",
+      uploadNoFrontmatter: "SKILL.md must start with YAML frontmatter (--- delimiter)",
+      uploadNoName: "SKILL.md frontmatter is missing a 'name' field",
+      uploadNoDesc: "SKILL.md frontmatter is missing a 'description' field",
     },
 
     // -- Timeline --
@@ -331,6 +339,14 @@ const messages = {
       no_data: "暂无技能。创建一个来开始吧。",
       references: "参考文档",
       scripts: "脚本",
+      upload: "上传目录",
+      uploadSuccess: "技能 \u201c{name}\u201d 上传成功（{count} 个文件）",
+      uploadError: "无法读取所选文件夹",
+      uploadDuplicate: "技能 \u201c{name}\u201d 已存在，请先删除或重命名文件夹。",
+      uploadNoSkillMd: "所选文件夹中未找到 SKILL.md 文件",
+      uploadNoFrontmatter: "SKILL.md 必须以 YAML 前置元数据开头（--- 分隔符）",
+      uploadNoName: "SKILL.md 前置元数据缺少 name 字段",
+      uploadNoDesc: "SKILL.md 前置元数据缺少 description 字段",
     },
 
     timeline: {

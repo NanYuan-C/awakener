@@ -219,6 +219,153 @@
   };
 
   // ========================================================================
+  // Upload skill folder
+  // ========================================================================
+
+  /**
+   * Trigger the hidden folder input.
+   */
+  window.triggerUpload = function() {
+    var input = document.getElementById('folder-input');
+    input.value = ''; // Reset so the same folder can be re-selected
+    input.click();
+  };
+
+  /**
+   * Handle folder selection from the file input.
+   * Reads all files, validates, and uploads to the backend.
+   *
+   * @param {HTMLInputElement} input - The file input element.
+   */
+  window.handleFolderUpload = async function(input) {
+    var fileList = input.files;
+    if (!fileList || fileList.length === 0) return;
+
+    // Determine the skill directory name from the first file's path.
+    // webkitRelativePath format: "folder-name/SKILL.md" or "folder-name/sub/file"
+    var firstPath = fileList[0].webkitRelativePath || '';
+    var skillName = firstPath.split('/')[0];
+
+    if (!skillName) {
+      toast(t('skills.uploadError'), 'error');
+      return;
+    }
+
+    // Check for duplicate name against loaded skills
+    var exists = currentSkills.some(function(s) { return s.name === skillName; });
+    if (exists) {
+      toast(t('skills.uploadDuplicate').replace('{name}', skillName), 'error');
+      return;
+    }
+
+    // Read all files and build the payload
+    var files = [];
+    var hasSkillMd = false;
+    var skillMdContent = '';
+
+    for (var i = 0; i < fileList.length; i++) {
+      var file = fileList[i];
+      var relPath = file.webkitRelativePath || file.name;
+
+      // Strip the top-level directory name to get the relative path within the skill
+      var parts = relPath.split('/');
+      parts.shift(); // Remove top-level dir
+      var innerPath = parts.join('/');
+
+      if (!innerPath) continue;
+
+      // Read file content as text
+      try {
+        var content = await readFileAsText(file);
+        files.push({ path: innerPath, content: content });
+
+        if (innerPath === 'SKILL.md') {
+          hasSkillMd = true;
+          skillMdContent = content;
+        }
+      } catch (err) {
+        // Skip binary files that can't be read as text
+        console.warn('Skipping file (binary?):', innerPath);
+      }
+    }
+
+    // Validate: SKILL.md must exist
+    if (!hasSkillMd) {
+      toast(t('skills.uploadNoSkillMd'), 'error');
+      return;
+    }
+
+    // Validate: frontmatter must have name and description
+    var validation = validateSkillMd(skillMdContent);
+    if (validation) {
+      toast(validation, 'error');
+      return;
+    }
+
+    // Upload to backend
+    try {
+      var result = await api.post('/api/skills/upload', {
+        name: skillName,
+        files: files,
+      });
+      toast(t('skills.uploadSuccess').replace('{name}', skillName)
+            .replace('{count}', result.files || files.length), 'success');
+      await loadSkills();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+
+  /**
+   * Read a File object as text.
+   * @param {File} file
+   * @returns {Promise<string>}
+   */
+  function readFileAsText(file) {
+    return new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function() { resolve(reader.result); };
+      reader.onerror = function() { reject(reader.error); };
+      reader.readAsText(file);
+    });
+  }
+
+  /**
+   * Validate SKILL.md content: must have frontmatter with name & description.
+   * @param {string} content - The SKILL.md file content.
+   * @returns {string|null} Error message, or null if valid.
+   */
+  function validateSkillMd(content) {
+    if (!content.startsWith('---')) {
+      return t('skills.uploadNoFrontmatter');
+    }
+
+    var end = content.indexOf('---', 3);
+    if (end === -1) {
+      return t('skills.uploadNoFrontmatter');
+    }
+
+    var frontmatter = content.substring(3, end).trim();
+    var lines = frontmatter.split('\n');
+    var hasName = false;
+    var hasDesc = false;
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (/^name\s*:/.test(line) && line.split(':').slice(1).join(':').trim()) {
+        hasName = true;
+      }
+      if (/^description\s*:/.test(line) && line.split(':').slice(1).join(':').trim()) {
+        hasDesc = true;
+      }
+    }
+
+    if (!hasName) return t('skills.uploadNoName');
+    if (!hasDesc) return t('skills.uploadNoDesc');
+    return null;
+  }
+
+  // ========================================================================
   // Modal helpers
   // ========================================================================
 
