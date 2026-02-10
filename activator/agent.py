@@ -334,10 +334,12 @@ def _consume_stream(
             if logger:
                 logger.thought_chunk(delta.content)
 
-        # -- Accumulate reasoning (DeepSeek Reasoner) --
+        # -- Accumulate reasoning and stream to frontend (DeepSeek Reasoner) --
         reasoning_delta = getattr(delta, "reasoning_content", None)
         if reasoning_delta:
             reasoning += reasoning_delta
+            if logger:
+                logger.thought_chunk(reasoning_delta)
 
         # -- Accumulate tool call deltas --
         if hasattr(delta, "tool_calls") and delta.tool_calls:
@@ -453,13 +455,11 @@ def run_round(
             )
 
         # -- Finalize thought display --
+        # For thinking models: reasoning_content is the "thought", content is the final answer
+        if reasoning and logger:
+            logger.thought_done(reasoning)
         if content and logger:
             logger.thought_done(content)
-
-        # Log reasoning (for thinking models like DeepSeek Reasoner)
-        if reasoning and logger:
-            preview = reasoning[:500] + ("..." if len(reasoning) > 500 else "")
-            logger.info(f"[REASONING] {preview}")
 
         # Timestamp for this LLM turn (used by _extract_summary)
         turn_ts = datetime.now().strftime("%H:%M:%S")
