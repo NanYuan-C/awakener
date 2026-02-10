@@ -220,8 +220,10 @@ def build_system_message(
             parts.append("## Installed Skills")
             parts.append("")
             parts.append(
-                "The following skills are available. Use `skill_read(name)` "
-                "to read full instructions when you need to apply a skill."
+                "You have expert skills installed. **Before starting any "
+                "building or coding work, read the relevant skills first** "
+                "using `skill_read(name)`. They contain critical guidelines "
+                "and best practices you must follow."
             )
             parts.append("")
             parts.append("| Skill | Description |")

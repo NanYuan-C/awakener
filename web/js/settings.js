@@ -192,7 +192,7 @@
     var agent = config.agent || {};
     document.getElementById('interval').value    = agent.interval ?? 30;
     document.getElementById('max-tools').value    = agent.max_tool_calls ?? 20;
-    document.getElementById('tool-timeout').value = agent.tool_timeout ?? 30;
+    document.getElementById('tool-timeout').value = agent.shell_timeout ?? 30;
   }
 
   /**
@@ -204,7 +204,7 @@
         agent: {
           interval: parseInt(document.getElementById('interval').value, 10),
           max_tool_calls: parseInt(document.getElementById('max-tools').value, 10),
-          tool_timeout: parseInt(document.getElementById('tool-timeout').value, 10),
+          shell_timeout: parseInt(document.getElementById('tool-timeout').value, 10),
         }
       });
       toast('Agent parameters saved', 'success');
