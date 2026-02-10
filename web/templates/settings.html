@@ -8,67 +8,67 @@
   Settings Page
   =============
   Configuration management:
-    - Model selection (provider + model name)
-    - API key management (add / edit / remove keys)
+    - Model + API Key (unified card: select provider → pick model → enter key)
     - Agent parameters (interval, max tool calls, timeout)
     - Password change
 -->
 
 <!-- ====================================================================== -->
-<!-- Model Configuration                                                    -->
+<!-- Model & API Key (unified)                                              -->
 <!-- ====================================================================== -->
 <div class="settings-section">
   <h2 data-i18n="settings.model">Model Configuration</h2>
   <div class="card">
     <div class="form-group">
       <label for="model-provider" data-i18n="settings.provider">Provider</label>
-      <select id="model-provider" class="form-control">
+      <select id="model-provider" class="form-control" onchange="onProviderChange()">
         <option value="deepseek">DeepSeek</option>
         <option value="openai">OpenAI</option>
         <option value="anthropic">Anthropic</option>
+        <option value="google">Google (Gemini)</option>
         <option value="openrouter">OpenRouter</option>
-        <option value="custom">Custom (LiteLLM compatible)</option>
+        <option value="custom">Custom</option>
       </select>
     </div>
+
     <div class="form-group">
-      <label for="model-name" data-i18n="settings.modelName">Model Name</label>
-      <input type="text" id="model-name" class="form-control" placeholder="e.g. deepseek-chat">
-      <div class="hint" data-i18n="settings.modelHint">
-        The model identifier used by LiteLLM. Examples: deepseek-chat, gpt-4o, claude-sonnet-4-20250514
+      <label for="model-name" data-i18n="settings.modelName">Model</label>
+      <select id="model-preset" class="form-control" onchange="onPresetChange()">
+        <!-- Dynamically populated by JS based on provider -->
+      </select>
+      <input type="text" id="model-name" class="form-control mt-sm hidden"
+             placeholder="e.g. deepseek/deepseek-chat">
+      <div class="hint" id="model-hint"></div>
+    </div>
+
+    <div class="form-group">
+      <label for="model-api-key" data-i18n="settings.apiKey">API Key</label>
+      <div class="flex gap-sm">
+        <input type="password" id="model-api-key" class="form-control"
+               placeholder="sk-..." style="flex:1;">
+        <button class="btn btn-sm btn-outline" onclick="toggleKeyVisibility()" title="Show/Hide" id="btn-toggle-key">
+          &#x1F441;
+        </button>
+      </div>
+      <div class="hint" id="key-hint"></div>
+    </div>
+
+    <div id="advanced-toggle" class="text-sm text-muted mb-md" style="cursor:pointer;" onclick="toggleAdvanced()">
+      &#x25B6; <span data-i18n="settings.advanced">Advanced options</span>
+    </div>
+    <div id="advanced-options" class="hidden">
+      <div class="form-group">
+        <label for="api-base" data-i18n="settings.apiBase">API Base URL (optional)</label>
+        <input type="text" id="api-base" class="form-control" placeholder="https://api.deepseek.com">
+        <div class="hint" data-i18n="settings.apiBaseHint">
+          Leave empty to use the provider's default endpoint
+        </div>
       </div>
     </div>
-    <div class="form-group">
-      <label for="api-base" data-i18n="settings.apiBase">API Base URL (optional)</label>
-      <input type="text" id="api-base" class="form-control" placeholder="https://api.deepseek.com">
-      <div class="hint" data-i18n="settings.apiBaseHint">
-        Leave empty to use the provider's default endpoint
-      </div>
-    </div>
+
     <button class="btn btn-primary" onclick="saveModelConfig()">
       <span data-i18n="settings.save">Save</span>
     </button>
-  </div>
-</div>
-
-<!-- ====================================================================== -->
-<!-- API Keys                                                               -->
-<!-- ====================================================================== -->
-<div class="settings-section">
-  <h2 data-i18n="settings.apiKeys">API Keys</h2>
-  <div class="card">
-    <p class="text-sm text-muted mb-md" data-i18n="settings.apiKeysHint">
-      API keys are stored in the .env file on your server. Values are masked for security.
-    </p>
-    <div id="api-keys-list">
-      <!-- Dynamically populated -->
-    </div>
-    <div class="mt-md flex gap-sm">
-      <input type="text" id="new-key-name" class="form-control" placeholder="KEY_NAME" style="max-width:200px;">
-      <input type="text" id="new-key-value" class="form-control" placeholder="sk-..." style="flex:1;">
-      <button class="btn btn-primary" onclick="addApiKey()">
-        <span data-i18n="settings.addKey">Add Key</span>
-      </button>
-    </div>
   </div>
 </div>
 
