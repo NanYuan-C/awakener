@@ -51,11 +51,3 @@ agent:
   # Maximum characters returned from tool output (read_file, shell_execute).
   # Prevents context window overflow from large outputs.
   max_output_chars: 4000
-
-  # Name of the persona file to use (from the prompts/ directory).
-  # Do not include the .md extension.
-  persona: "default"
-
-  # Number of recent notebook entries to inject into the agent's prompt.
-  # Higher values give the agent more context but use more tokens.
-  notebook_inject_count: 3

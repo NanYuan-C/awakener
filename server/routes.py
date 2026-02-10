@@ -8,7 +8,8 @@ Route groups:
     /api/config      - Configuration management (read / update config.yaml)
     /api/config/keys - API key management (list / add / update / delete)
     /api/agent/*     - Agent lifecycle control (start / stop / restart / status / inspiration)
-    /api/prompts/*   - Persona prompt management (list / read / write / delete)
+    /api/prompt      - Single global prompt management (read / update default.md)
+    /api/skills/*    - Skill management (list / get / add / toggle / delete)
     /api/timeline    - Timeline data access (one entry per round)
     /api/memory/*    - Agent notebook entries (JSONL per-round notes)
     /api/logs        - Activator run logs (per-day files)
@@ -19,9 +20,10 @@ See auth.py for authentication details.
 
 import os
 import json
+import shutil
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel, Field
 
 from server.auth import AuthManager, require_auth
@@ -283,98 +285,178 @@ def create_router(
         return {"message": "Inspiration sent to agent"}
 
     # =========================================================================
-    # PROMPT MANAGEMENT ROUTES - Requires authentication
+    # PROMPT ROUTE - Single global prompt (default.md)
     # =========================================================================
 
-    @router.get("/prompts", dependencies=[auth])
-    async def list_prompts():
+    @router.get("/prompt", dependencies=[auth])
+    async def get_prompt():
         """
-        List all available persona prompts from the prompts/ directory.
-        Returns name, filename, preview text, and active status.
-        """
-        config = config_manager.load()
-        active = config.get("agent", {}).get("persona", "default")
-        personas = config_manager.list_personas()
-
-        for p in personas:
-            p["active"] = (p["name"] == active or p["name"] == active + ".md")
-
-        return {"prompts": personas, "active": active}
-
-    @router.get("/prompts/{name:path}", dependencies=[auth])
-    async def get_prompt(name: str):
-        """
-        Get the content of a specific persona prompt file.
-        The name parameter can include the .md extension or not.
+        Get the content of the global agent prompt (prompts/default.md).
+        There is only one prompt file — no switching or listing.
         """
         prompts_dir = config_manager.get_prompts_dir()
-
-        # Support both "default" and "default.md"
-        if not name.endswith(".md"):
-            filename = name + ".md"
-        else:
-            filename = name
-            name = name[:-3]
-
-        filepath = os.path.join(prompts_dir, filename)
+        filepath = os.path.join(prompts_dir, "default.md")
 
         if not os.path.exists(filepath):
-            raise HTTPException(status_code=404, detail=f"Persona '{name}' not found")
+            return {"content": ""}
 
         with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
 
-        return {"name": name, "content": content}
+        return {"content": content}
 
-    @router.put("/prompts/{name:path}", dependencies=[auth])
-    async def update_prompt(name: str, req: PromptContentRequest):
+    @router.put("/prompt", dependencies=[auth])
+    async def update_prompt(req: PromptContentRequest):
         """
-        Create or update a persona prompt file.
-        If the file doesn't exist, it will be created.
-        The name parameter can include the .md extension or not.
+        Update the global agent prompt (prompts/default.md).
         """
         prompts_dir = config_manager.get_prompts_dir()
-
-        if not name.endswith(".md"):
-            filename = name + ".md"
-        else:
-            filename = name
-
-        filepath = os.path.join(prompts_dir, filename)
         os.makedirs(prompts_dir, exist_ok=True)
+        filepath = os.path.join(prompts_dir, "default.md")
 
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(req.content)
 
-        return {"message": f"Persona '{name}' saved"}
+        return {"message": "Prompt saved"}
 
-    @router.delete("/prompts/{name:path}", dependencies=[auth])
-    async def delete_prompt(name: str):
+    # =========================================================================
+    # SKILL MANAGEMENT ROUTES - Requires authentication
+    # =========================================================================
+
+    @router.get("/skills", dependencies=[auth])
+    async def list_skills():
         """
-        Delete a persona prompt file.
-        The 'default' persona cannot be deleted.
+        List all installed skills from data/skills/ directory.
+        Each skill has a SKILL.md with YAML frontmatter metadata.
+        Returns name, title, description, tags, enabled status.
         """
-        # Strip .md extension for name comparison
-        clean_name = name[:-3] if name.endswith(".md") else name
+        from activator.tools import scan_skills
 
-        if clean_name == "default":
-            raise HTTPException(status_code=400, detail="Cannot delete the default persona")
+        skills_dir = os.path.join(config_manager.project_dir, "data", "skills")
+        skills = scan_skills(skills_dir)
+        return {"skills": skills}
 
-        prompts_dir = config_manager.get_prompts_dir()
-        filename = clean_name + ".md"
-        filepath = os.path.join(prompts_dir, filename)
+    @router.get("/skills/{name}", dependencies=[auth])
+    async def get_skill(name: str):
+        """
+        Get full details for a single skill including SKILL.md content,
+        list of reference files, and list of scripts.
+        """
+        from activator.tools import _parse_skill_frontmatter
 
-        if not os.path.exists(filepath):
-            raise HTTPException(status_code=404, detail=f"Persona '{clean_name}' not found")
+        skills_dir = os.path.join(config_manager.project_dir, "data", "skills")
+        skill_path = os.path.join(skills_dir, name)
 
-        os.remove(filepath)
+        if not os.path.isdir(skill_path):
+            raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
 
-        # If the deleted persona was active, switch to default
-        config = config_manager.load()
-        if config.get("agent", {}).get("persona") == clean_name:
-            config_manager.update({"agent": {"persona": "default"}})
+        skill_md = os.path.join(skill_path, "SKILL.md")
+        content = ""
+        if os.path.isfile(skill_md):
+            with open(skill_md, "r", encoding="utf-8") as f:
+                content = f.read()
 
-        return {"message": f"Persona '{clean_name}' deleted"}
+        meta = _parse_skill_frontmatter(skill_md) if os.path.isfile(skill_md) else {}
+
+        # List reference files
+        refs_dir = os.path.join(skill_path, "references")
+        refs = []
+        if os.path.isdir(refs_dir):
+            for root, _, files in os.walk(refs_dir):
+                for fn in sorted(files):
+                    rel = os.path.relpath(os.path.join(root, fn), skill_path)
+                    refs.append(rel.replace("\\", "/"))
+
+        # List scripts
+        scripts_dir = os.path.join(skill_path, "scripts")
+        scripts = []
+        if os.path.isdir(scripts_dir):
+            for fn in sorted(os.listdir(scripts_dir)):
+                fp = os.path.join(scripts_dir, fn)
+                if os.path.isfile(fp):
+                    scripts.append(fn)
+
+        return {
+            "name": name,
+            "title": meta.get("name", name),
+            "description": meta.get("description", ""),
+            "version": str(meta.get("version", "")),
+            "tags": meta.get("tags", []),
+            "content": content,
+            "references": refs,
+            "scripts": scripts,
+        }
+
+    @router.put("/skills/{name}", dependencies=[auth])
+    async def update_skill(name: str, req: PromptContentRequest):
+        """
+        Update a skill's SKILL.md content.
+        If the skill directory doesn't exist, it is created.
+        """
+        skills_dir = os.path.join(config_manager.project_dir, "data", "skills")
+        skill_path = os.path.join(skills_dir, name)
+        os.makedirs(skill_path, exist_ok=True)
+
+        filepath = os.path.join(skill_path, "SKILL.md")
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(req.content)
+
+        return {"message": f"Skill '{name}' saved"}
+
+    @router.put("/skills/{name}/toggle", dependencies=[auth])
+    async def toggle_skill(name: str):
+        """
+        Toggle the enabled/disabled state of a skill.
+        Disabled skills are not injected into the agent's prompt and
+        their tools are hidden.
+        """
+        from activator.tools import _load_skills_config, _save_skills_config
+
+        skills_dir = os.path.join(config_manager.project_dir, "data", "skills")
+        skill_path = os.path.join(skills_dir, name)
+
+        if not os.path.isdir(skill_path):
+            raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
+
+        config = _load_skills_config(skills_dir)
+        disabled = set(config.get("disabled", []))
+
+        if name in disabled:
+            disabled.discard(name)
+            enabled = True
+        else:
+            disabled.add(name)
+            enabled = False
+
+        config["disabled"] = sorted(disabled)
+        _save_skills_config(skills_dir, config)
+
+        return {"name": name, "enabled": enabled}
+
+    @router.delete("/skills/{name}", dependencies=[auth])
+    async def delete_skill(name: str):
+        """
+        Delete a skill and all its files.
+        This permanently removes the skill directory.
+        """
+        skills_dir = os.path.join(config_manager.project_dir, "data", "skills")
+        skill_path = os.path.join(skills_dir, name)
+
+        if not os.path.isdir(skill_path):
+            raise HTTPException(status_code=404, detail=f"Skill '{name}' not found")
+
+        shutil.rmtree(skill_path)
+
+        # Remove from disabled list if present
+        from activator.tools import _load_skills_config, _save_skills_config
+        config = _load_skills_config(skills_dir)
+        disabled = set(config.get("disabled", []))
+        if name in disabled:
+            disabled.discard(name)
+            config["disabled"] = sorted(disabled)
+            _save_skills_config(skills_dir, config)
+
+        return {"message": f"Skill '{name}' deleted"}
 
     # =========================================================================
     # TIMELINE ROUTE - Requires authentication

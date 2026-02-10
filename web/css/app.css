@@ -1095,51 +1095,6 @@ select.form-control {
    10. Prompts Page
    ========================================================================== */
 
-.prompt-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: var(--spacing-md);
-}
-
-.prompt-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-md);
-  transition: box-shadow var(--transition-fast);
-  cursor: pointer;
-}
-
-.prompt-card:hover {
-  box-shadow: var(--shadow-md);
-}
-
-.prompt-card.active {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.2);
-}
-
-.prompt-card h4 {
-  font-size: var(--font-size-lg);
-  margin-bottom: var(--spacing-xs);
-}
-
-.prompt-card p {
-  color: var(--color-text-light);
-  font-size: var(--font-size-sm);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.prompt-card-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: var(--spacing-md);
-}
-
 /* -- Prompt editor -------------------------------------------------------- */
 
 .prompt-editor {
@@ -1147,6 +1102,101 @@ select.form-control {
   font-size: var(--font-size-sm);
   min-height: 300px;
   line-height: 1.6;
+}
+
+
+/* ==========================================================================
+   10b. Skills Page
+   ========================================================================== */
+
+.skill-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.skill-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
+  transition: box-shadow var(--transition-fast);
+  display: flex;
+  flex-direction: column;
+}
+
+.skill-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.skill-card.disabled {
+  opacity: 0.6;
+}
+
+.skill-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-xs);
+}
+
+.skill-card-header h4 {
+  font-size: var(--font-size-lg);
+  margin: 0;
+}
+
+.skill-desc {
+  color: var(--color-text-light);
+  font-size: var(--font-size-sm);
+  margin-bottom: var(--spacing-sm);
+  flex: 1;
+}
+
+.skill-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: var(--spacing-sm);
+}
+
+.skill-tag {
+  display: inline-block;
+  background: var(--color-bg);
+  color: var(--color-text-light);
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--color-border);
+}
+
+.skill-card-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.skill-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--color-border);
+}
+
+.btn-warning {
+  background: #f59e0b;
+  color: #fff;
+  border: none;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+}
+
+.btn-warning:hover {
+  background: #d97706;
 }
 
 
@@ -1379,7 +1429,7 @@ select.form-control {
     grid-template-columns: 1fr 1fr;
   }
 
-  .prompt-list {
+  .skill-list {
     grid-template-columns: 1fr;
   }
 

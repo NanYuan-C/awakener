@@ -29,6 +29,7 @@ providing better continuity.
 import os
 from datetime import datetime, timezone
 from activator.memory import MemoryManager
+from activator.tools import scan_skills
 
 
 # =============================================================================
@@ -40,7 +41,7 @@ TOOL_DOCS = """
 
 ## Available Tools
 
-You have 5 tools at your disposal:
+You have 7 tools at your disposal:
 
 ### 1. shell_execute(command)
 Execute a shell command on this server. Your working directory is your home folder.
@@ -59,8 +60,18 @@ learned, and what you plan to do next. **You MUST call this at least once
 before the round ends.**
 
 ### 5. notebook_read(round)
-Read your note from a specific past round. Your most recent 3 rounds are
+Read your note from a specific past round. Your most recent rounds are
 already shown to you. Use this tool to look up older rounds.
+
+### 6. skill_read(name, file?)
+Read a skill's instruction file or bundled reference document. Your installed
+skills are listed below. Call `skill_read("skill-name")` to get the full
+SKILL.md instructions. Use the optional `file` parameter to read reference
+files, e.g. `skill_read("db-optimizer", "references/mysql-tuning.md")`.
+
+### 7. skill_exec(name, script, args?)
+Execute a script bundled with a skill. The script must be inside the skill's
+`scripts/` directory. Pass optional arguments as a string.
 
 ## Important Rules
 
@@ -100,22 +111,53 @@ def load_persona(project_dir: str, persona_name: str) -> str:
         )
 
 
-def build_system_message(project_dir: str, persona_name: str) -> str:
+def build_system_message(
+    project_dir: str,
+    persona_name: str,
+    skills_dir: str = "",
+) -> str:
     """
-    Build the full system message: persona + tool docs + rules.
+    Build the full system message: persona + tool docs + skills index.
 
     The system message is static for the duration of a round.
-    It defines who the agent is and what tools it can use.
+    It defines who the agent is, what tools it can use, and which
+    skills are available.
+
+    Skills are presented as a concise index table. The agent must call
+    ``skill_read(name)`` to get the full instructions (progressive
+    disclosure — saves tokens when skills are not needed this round).
 
     Args:
         project_dir:  Awakener project root.
         persona_name: Active persona name.
+        skills_dir:   Path to ``data/skills/`` directory.
 
     Returns:
         Complete system message string.
     """
     persona = load_persona(project_dir, persona_name)
-    return f"{persona}\n\n{TOOL_DOCS}"
+    parts = [persona, "", TOOL_DOCS]
+
+    # Append skills index (only enabled skills)
+    if skills_dir:
+        skills = scan_skills(skills_dir)
+        enabled = [s for s in skills if s.get("enabled")]
+        if enabled:
+            parts.append("")
+            parts.append("## Installed Skills")
+            parts.append("")
+            parts.append(
+                "The following skills are available. Use `skill_read(name)` "
+                "to read full instructions when you need to apply a skill."
+            )
+            parts.append("")
+            parts.append("| Skill | Description |")
+            parts.append("|-------|-------------|")
+            for s in enabled:
+                desc = s.get("description", "") or s.get("title", s["name"])
+                parts.append(f"| {s['name']} | {desc} |")
+
+    return "\n".join(parts)
 
 
 def build_user_message(

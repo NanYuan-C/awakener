@@ -1,13 +1,15 @@
 """
 Awakener - Agent Tool Set
 ============================
-Defines the 5 tools available to the autonomous agent:
+Defines the 7 tools available to the autonomous agent:
 
     1. shell_execute  - Run a shell command (cwd = agent_home)
     2. read_file      - Read a file from the server
     3. write_file     - Write/append content to a file
     4. notebook_write - Save this round's note (mandatory each round)
     5. notebook_read  - Read ONE specific historical round's note
+    6. skill_read     - Read a skill's SKILL.md or bundled reference file
+    7. skill_exec     - Execute a script bundled with a skill
 
 Safety:
     The agent must not be able to terminate the awakener system that
@@ -28,10 +30,13 @@ Safety:
     7. tmux kill-server / screen -X quit are always blocked.
 """
 
+import json
 import os
 import re
 import subprocess
 from typing import Any
+
+import yaml
 
 
 # =============================================================================
@@ -152,6 +157,72 @@ TOOLS_SCHEMA = [
                     }
                 },
                 "required": ["round"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "skill_read",
+            "description": (
+                "Read a skill's instruction file (SKILL.md) or a bundled "
+                "reference document. Your installed skills are listed in the "
+                "system prompt. Use this tool to get the full instructions "
+                "when you need to apply a skill."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": (
+                            "The skill directory name, e.g. 'python-best-practices'"
+                        ),
+                    },
+                    "file": {
+                        "type": "string",
+                        "description": (
+                            "Optional relative path within the skill directory. "
+                            "Defaults to 'SKILL.md'. Use this to read reference "
+                            "files, e.g. 'references/guide.md'."
+                        ),
+                    },
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "skill_exec",
+            "description": (
+                "Execute a script bundled with a skill. "
+                "The script must exist inside the skill's 'scripts/' directory. "
+                "Returns the combined stdout and stderr output."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "The skill directory name",
+                    },
+                    "script": {
+                        "type": "string",
+                        "description": (
+                            "Script filename inside the skill's scripts/ directory, "
+                            "e.g. 'analyze.sh' or 'setup.py'"
+                        ),
+                    },
+                    "args": {
+                        "type": "string",
+                        "description": (
+                            "Optional command-line arguments passed to the script"
+                        ),
+                    },
+                },
+                "required": ["name", "script"],
             },
         },
     },
@@ -591,6 +662,269 @@ def _write_file(
 
 
 # =============================================================================
+# Skill Helpers
+# =============================================================================
+
+def _load_skills_config(skills_dir: str) -> dict:
+    """
+    Load the skills configuration (enabled/disabled state).
+
+    The config file ``skills.json`` in the data directory tracks which
+    skills are disabled.  Skills not listed are enabled by default.
+
+    Args:
+        skills_dir: Path to ``data/skills/`` directory.
+
+    Returns:
+        Dict with ``"disabled"`` key containing a list of skill names.
+    """
+    config_path = os.path.join(skills_dir, "_config.json")
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {"disabled": []}
+
+
+def _save_skills_config(skills_dir: str, config: dict) -> None:
+    """Save the skills configuration to ``_config.json``."""
+    config_path = os.path.join(skills_dir, "_config.json")
+    os.makedirs(skills_dir, exist_ok=True)
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+
+
+def scan_skills(skills_dir: str) -> list[dict]:
+    """
+    Scan the skills directory and return metadata for all installed skills.
+
+    Each skill is a subdirectory containing a ``SKILL.md`` file with
+    optional YAML frontmatter.  Directories starting with ``_`` are
+    ignored (reserved for config files).
+
+    Args:
+        skills_dir: Path to ``data/skills/`` directory.
+
+    Returns:
+        List of dicts, each containing::
+
+            {
+                "name":        "python-best-practices",
+                "title":       "Python Best Practices",
+                "description": "Guidelines for clean Python code",
+                "version":     "1.0",
+                "tags":        ["python", "code-quality"],
+                "enabled":     True,
+                "has_scripts": True,
+                "has_refs":    True,
+            }
+    """
+    if not os.path.isdir(skills_dir):
+        return []
+
+    config = _load_skills_config(skills_dir)
+    disabled = set(config.get("disabled", []))
+    skills = []
+
+    for entry in sorted(os.listdir(skills_dir)):
+        if entry.startswith("_") or entry.startswith("."):
+            continue
+        skill_path = os.path.join(skills_dir, entry)
+        if not os.path.isdir(skill_path):
+            continue
+
+        skill_md = os.path.join(skill_path, "SKILL.md")
+        if not os.path.isfile(skill_md):
+            continue
+
+        # Parse YAML frontmatter from SKILL.md
+        meta = _parse_skill_frontmatter(skill_md)
+
+        skills.append({
+            "name": entry,
+            "title": meta.get("name", entry),
+            "description": meta.get("description", ""),
+            "version": str(meta.get("version", "")),
+            "tags": meta.get("tags", []),
+            "enabled": entry not in disabled,
+            "has_scripts": os.path.isdir(os.path.join(skill_path, "scripts")),
+            "has_refs": os.path.isdir(os.path.join(skill_path, "references")),
+        })
+
+    return skills
+
+
+def _parse_skill_frontmatter(filepath: str) -> dict:
+    """
+    Parse YAML frontmatter from a SKILL.md file.
+
+    Frontmatter is delimited by ``---`` lines at the top of the file.
+    If no frontmatter is found, returns an empty dict.
+
+    Args:
+        filepath: Absolute path to the SKILL.md file.
+
+    Returns:
+        Parsed YAML frontmatter as a dict.
+    """
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read()
+    except OSError:
+        return {}
+
+    if not content.startswith("---"):
+        return {}
+
+    # Find the closing ---
+    end = content.find("---", 3)
+    if end == -1:
+        return {}
+
+    frontmatter = content[3:end].strip()
+    try:
+        return yaml.safe_load(frontmatter) or {}
+    except yaml.YAMLError:
+        return {}
+
+
+def _skill_read(
+    name: str,
+    file: str,
+    skills_dir: str,
+    max_output: int = 4000,
+) -> str:
+    """
+    Read a file from an installed skill.
+
+    Args:
+        name:       Skill directory name.
+        file:       Relative path within the skill directory (default SKILL.md).
+        skills_dir: Path to ``data/skills/`` directory.
+        max_output: Max characters to return.
+
+    Returns:
+        File content or error message.
+    """
+    if not name:
+        return "(error: skill name is required)"
+
+    skill_path = os.path.join(skills_dir, name)
+    if not os.path.isdir(skill_path):
+        return f"(error: skill '{name}' not found)"
+
+    # Default to SKILL.md
+    if not file:
+        file = "SKILL.md"
+
+    # Prevent path traversal
+    target = os.path.realpath(os.path.join(skill_path, file))
+    skill_real = os.path.realpath(skill_path)
+    if not target.startswith(skill_real + os.sep) and target != skill_real:
+        return "(error: path traversal is not allowed)"
+
+    if not os.path.isfile(target):
+        return f"(error: file '{file}' not found in skill '{name}')"
+
+    try:
+        with open(target, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+        if not content:
+            return "(file is empty)"
+        if len(content) > max_output:
+            content = (
+                content[:max_output]
+                + f"\n... (truncated, total {len(content)} chars)"
+            )
+        return content
+    except Exception as e:
+        return f"(error: {type(e).__name__}: {e})"
+
+
+def _skill_exec(
+    name: str,
+    script: str,
+    args: str,
+    skills_dir: str,
+    agent_home: str,
+    timeout: int = 30,
+    max_output: int = 4000,
+) -> str:
+    """
+    Execute a script bundled with a skill.
+
+    The script must reside in the skill's ``scripts/`` directory.
+    It is executed with the agent's home directory as cwd and a
+    sanitised environment (no API keys or host session variables).
+
+    Args:
+        name:       Skill directory name.
+        script:     Script filename inside ``scripts/``.
+        args:       Optional command-line arguments string.
+        skills_dir: Path to ``data/skills/`` directory.
+        agent_home: Agent's working directory (cwd for subprocess).
+        timeout:    Max execution time in seconds.
+        max_output: Max characters to return.
+
+    Returns:
+        Script output or error message.
+    """
+    if not name or not script:
+        return "(error: skill name and script are required)"
+
+    skill_path = os.path.join(skills_dir, name)
+    if not os.path.isdir(skill_path):
+        return f"(error: skill '{name}' not found)"
+
+    scripts_dir = os.path.join(skill_path, "scripts")
+    if not os.path.isdir(scripts_dir):
+        return f"(error: skill '{name}' has no scripts/ directory)"
+
+    # Prevent path traversal
+    target = os.path.realpath(os.path.join(scripts_dir, script))
+    scripts_real = os.path.realpath(scripts_dir)
+    if not target.startswith(scripts_real + os.sep) and target != scripts_real:
+        return "(error: path traversal is not allowed)"
+
+    if not os.path.isfile(target):
+        return f"(error: script '{script}' not found in skill '{name}')"
+
+    # Build the command
+    command = target
+    if args:
+        command += " " + args
+
+    try:
+        result = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            cwd=agent_home,
+            env=_make_clean_env(),
+        )
+        output = ""
+        if result.stdout:
+            output += result.stdout
+        if result.stderr:
+            output += result.stderr
+        if not output.strip():
+            output = f"(no output, exit code: {result.returncode})"
+        if len(output) > max_output:
+            output = (
+                output[:max_output]
+                + f"\n... (truncated, total {len(output)} chars)"
+            )
+        return output
+
+    except subprocess.TimeoutExpired:
+        return f"(error: script timed out after {timeout}s)"
+    except Exception as e:
+        return f"(error: {type(e).__name__}: {e})"
+
+
+# =============================================================================
 # Tool Dispatcher
 # =============================================================================
 
@@ -612,6 +946,7 @@ class ToolExecutor:
         memory:        MemoryManager instance for notebook operations.
         current_round: Current activation round number.
         notebook_written: Whether notebook_write was called this round.
+        skills_dir:    Path to the skills directory (data/skills/).
     """
 
     def __init__(
@@ -624,6 +959,7 @@ class ToolExecutor:
         memory_manager: Any = None,
         current_round: int = 0,
         host_env: dict | None = None,
+        skills_dir: str = "",
     ):
         self.agent_home = agent_home
         self.project_dir = project_dir
@@ -634,6 +970,7 @@ class ToolExecutor:
         self.current_round = current_round
         self.notebook_written = False
         self.host_env = host_env or {}
+        self.skills_dir = skills_dir
 
     def _resolve_path(self, path: str) -> str:
         """
@@ -665,7 +1002,7 @@ class ToolExecutor:
         Dispatch and execute a tool by name.
 
         Args:
-            name: Tool function name (one of the 5 tools).
+            name: Tool function name (one of the 7 tools).
             args: Parsed argument dictionary from the LLM.
 
         Returns:
@@ -702,6 +1039,25 @@ class ToolExecutor:
 
         elif name == "notebook_read":
             return self._notebook_read(args.get("round", 0))
+
+        elif name == "skill_read":
+            return _skill_read(
+                name=args.get("name", ""),
+                file=args.get("file", ""),
+                skills_dir=self.skills_dir,
+                max_output=self.max_output,
+            )
+
+        elif name == "skill_exec":
+            return _skill_exec(
+                name=args.get("name", ""),
+                script=args.get("script", ""),
+                args=args.get("args", ""),
+                skills_dir=self.skills_dir,
+                agent_home=self.agent_home,
+                timeout=self.timeout,
+                max_output=self.max_output,
+            )
 
         else:
             return f"(error: unknown tool '{name}')"

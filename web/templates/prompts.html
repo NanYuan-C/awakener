@@ -1,77 +1,43 @@
 {% extends "base.html" %}
 
-{% block title %}Personas - Awakener{% endblock %}
-{% block page_title %}Persona Prompts{% endblock %}
+{% block title %}Prompt - Awakener{% endblock %}
+{% block page_title %}Agent Prompt{% endblock %}
 
 {% block content %}
 <!--
-  Prompts Page
-  ============
-  Manage persona prompts that shape the agent's personality and behavior.
-    - List all available personas from prompts/ directory
-    - Select active persona
-    - Edit / create / delete persona files
-    - Preview prompt content
+  Prompt Page
+  ===========
+  Edit the single global agent prompt (prompts/default.md).
+  This prompt defines the agent's personality, goals, and behavior.
 -->
 
-<!-- ====================================================================== -->
-<!-- Toolbar                                                                -->
-<!-- ====================================================================== -->
-<div class="flex flex-between flex-center mb-lg">
-  <div>
-    <span class="text-muted text-sm" data-i18n="prompts.subtitle">
-      Persona prompts define the agent's personality, goals, and behavior style.
-    </span>
-  </div>
-  <button class="btn btn-primary" onclick="showCreateModal()">
-    + <span data-i18n="prompts.create">New Persona</span>
-  </button>
+<!-- Subtitle -->
+<div class="mb-lg">
+  <span class="text-muted text-sm" data-i18n="prompts.subtitle">
+    This prompt defines the agent's personality, goals, and behavior style.
+  </span>
 </div>
 
-<!-- ====================================================================== -->
-<!-- Persona cards grid                                                     -->
-<!-- ====================================================================== -->
-<div class="prompt-list" id="prompt-list">
-  <!-- Dynamically populated by prompts.js -->
-  <div class="empty-state">
-    <div class="empty-state-icon">&#x1F3AD;</div>
-    <p data-i18n="prompts.loading">Loading personas...</p>
+<!-- Editor Card -->
+<div class="card">
+  <div class="card-header">
+    <h3 data-i18n="prompts.title">Agent Prompt</h3>
   </div>
-</div>
-
-<!-- ====================================================================== -->
-<!-- Edit Modal                                                             -->
-<!-- ====================================================================== -->
-<div class="modal-overlay hidden" id="prompt-modal">
-  <div class="modal" style="max-width:700px;">
-    <div class="modal-header">
-      <h3 id="modal-title">Edit Persona</h3>
-      <button class="modal-close" onclick="closeModal()">&times;</button>
-    </div>
-
+  <div class="card-body">
     <div class="form-group">
-      <label for="prompt-filename" data-i18n="prompts.filename">Filename</label>
-      <input type="text" id="prompt-filename" class="form-control" placeholder="my-persona.md">
-      <div class="hint" data-i18n="prompts.filenameHint">
-        Filename within the prompts/ directory (e.g. explorer.md)
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label for="prompt-content" data-i18n="prompts.content">Prompt Content (Markdown)</label>
+      <label for="prompt-content" class="text-sm text-muted" data-i18n="prompts.contentLabel">
+        Prompt Content (Markdown)
+      </label>
       <textarea
         id="prompt-content"
         class="form-control prompt-editor"
-        rows="16"
-        placeholder="Write the persona prompt in Markdown..."
+        rows="20"
+        placeholder="Write the agent prompt in Markdown..."
+        data-i18n-placeholder="prompts.placeholder"
       ></textarea>
     </div>
-
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="closeModal()">
-        <span data-i18n="prompts.cancel">Cancel</span>
-      </button>
-      <button class="btn btn-primary" id="modal-save-btn" onclick="savePrompt()">
+    <div class="flex flex-end mt-md">
+      <button class="btn btn-primary" id="save-btn" onclick="savePrompt()">
         <span data-i18n="prompts.save">Save</span>
       </button>
     </div>

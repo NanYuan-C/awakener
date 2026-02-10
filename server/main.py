@@ -161,9 +161,16 @@ def create_app(project_dir: str | None = None) -> FastAPI:
 
     @app.get("/prompts")
     async def prompts_page(request: Request):
-        """Persona prompt management - list, edit, create, delete."""
+        """Global agent prompt editor."""
         return templates.TemplateResponse(
             "prompts.html", {"request": request, "page_id": "prompts"}
+        )
+
+    @app.get("/skills")
+    async def skills_page(request: Request):
+        """Skill management - list, view, enable/disable, create, delete."""
+        return templates.TemplateResponse(
+            "skills.html", {"request": request, "page_id": "skills"}
         )
 
     @app.get("/timeline")

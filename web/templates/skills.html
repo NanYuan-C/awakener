@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Skills - Awakener{% endblock %}
+{% block page_title %}Skills{% endblock %}
+
+{% block content %}
+<!--
+  Skills Page
+  ===========
+  Manage agent skills (structured instruction packs).
+  Each skill is a directory under data/skills/ containing a SKILL.md
+  with YAML frontmatter, optional scripts/ and references/.
+-->
+
+<!-- Toolbar -->
+<div class="flex flex-between flex-center mb-lg">
+  <div>
+    <span class="text-muted text-sm" data-i18n="skills.subtitle">
+      Skills extend the agent's capabilities with structured instructions and scripts.
+    </span>
+  </div>
+  <button class="btn btn-primary" onclick="showCreateModal()">
+    + <span data-i18n="skills.create">New Skill</span>
+  </button>
+</div>
+
+<!-- Skills grid -->
+<div class="skill-list" id="skill-list">
+  <div class="empty-state">
+    <div class="empty-state-icon">&#x1F9E9;</div>
+    <p data-i18n="skills.loading">Loading skills...</p>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- View / Edit Modal                                                      -->
+<!-- ====================================================================== -->
+<div class="modal-overlay hidden" id="skill-modal">
+  <div class="modal" style="max-width:750px;">
+    <div class="modal-header">
+      <h3 id="modal-title">Skill</h3>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+
+    <!-- Create mode: show name input -->
+    <div class="form-group" id="name-group">
+      <label for="skill-name" data-i18n="skills.name">Skill Name</label>
+      <input type="text" id="skill-name" class="form-control"
+             placeholder="my-skill (directory name, lowercase with hyphens)">
+      <div class="hint" data-i18n="skills.nameHint">
+        Used as the directory name. Use lowercase letters and hyphens.
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="skill-content" data-i18n="skills.content">
+        SKILL.md Content
+      </label>
+      <textarea
+        id="skill-content"
+        class="form-control prompt-editor"
+        rows="18"
+        placeholder="---&#10;name: My Skill&#10;description: What this skill does&#10;version: '1.0'&#10;tags: [example]&#10;---&#10;&#10;# Instructions..."
+      ></textarea>
+    </div>
+
+    <!-- Info: references & scripts (view mode only) -->
+    <div id="skill-files-info" class="hidden mb-md">
+      <div class="text-sm text-muted" id="skill-refs-info"></div>
+      <div class="text-sm text-muted" id="skill-scripts-info"></div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">
+        <span data-i18n="skills.cancel">Cancel</span>
+      </button>
+      <button class="btn btn-primary" id="modal-save-btn" onclick="saveSkill()">
+        <span data-i18n="skills.save">Save</span>
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/js/skills.js"></script>
+{% endblock %}

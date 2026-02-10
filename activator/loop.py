@@ -306,7 +306,7 @@ def run_activation_loop(
     max_tool_calls = agent_config.get("max_tool_calls", 20)
     shell_timeout = agent_config.get("shell_timeout", 30)
     max_output = agent_config.get("max_output_chars", 4000)
-    persona = agent_config.get("persona", "default")
+    persona = "default"  # Single global prompt (always default.md)
 
     # API key: try environment variable based on model provider
     api_key = _resolve_api_key(model)
@@ -314,9 +314,13 @@ def run_activation_loop(
     # -- Initialize subsystems --
     data_dir = os.path.join(project_dir, "data")
     log_dir = os.path.join(data_dir, "logs")
+    skills_dir = os.path.join(data_dir, "skills")
 
     memory = MemoryManager(data_dir)
     logger = ActivatorLogger(log_dir, ws_manager, event_loop)
+
+    # Ensure skills directory exists
+    os.makedirs(skills_dir, exist_ok=True)
 
     # Ensure agent home directory exists
     os.makedirs(agent_home, exist_ok=True)
@@ -350,7 +354,7 @@ def run_activation_loop(
             state_callback({"state": "running", "round": round_num})
 
         # Build context messages
-        system_msg = build_system_message(project_dir, persona)
+        system_msg = build_system_message(project_dir, persona, skills_dir)
         user_msg = build_user_message(round_num, max_tool_calls, memory)
 
         messages = [
@@ -374,6 +378,7 @@ def run_activation_loop(
             memory_manager=memory,
             current_round=round_num,
             host_env=host_env,
+            skills_dir=skills_dir,
         )
 
         # Run one activation round
