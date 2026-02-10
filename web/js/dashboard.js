@@ -151,8 +151,7 @@
       case 'thought':
         // Non-streaming fallback (used if streaming is not active)
         finalizeLiveThought();
-        var thought = (d.text || '').substring(0, 500);
-        appendLog('[THOUGHT] ' + thought, 'thought');
+        appendLog('[THOUGHT] ' + (d.text || ''), 'thought');
         break;
 
       case 'thought_chunk':
@@ -171,9 +170,7 @@
           logBody.appendChild(liveThoughtEl);
         }
         liveThoughtText += (d.text || '');
-        // Show truncated preview with typing cursor
-        var preview = liveThoughtText.substring(0, 500);
-        liveThoughtEl.textContent = liveThoughtEl.dataset.prefix + preview + '▊';
+        liveThoughtEl.textContent = liveThoughtEl.dataset.prefix + liveThoughtText + '▊';
         // Auto-scroll
         if (autoScroll.checked) {
           logBody.scrollTop = logBody.scrollHeight;
@@ -183,8 +180,7 @@
       case 'thought_done':
         // Finalize the streaming thought element
         if (liveThoughtEl) {
-          var finalText = (d.text || liveThoughtText || '').substring(0, 500);
-          liveThoughtEl.textContent = liveThoughtEl.dataset.prefix + finalText;
+          liveThoughtEl.textContent = liveThoughtEl.dataset.prefix + (d.text || liveThoughtText || '');
           liveThoughtEl.classList.remove('live-thought');
           liveThoughtEl = null;
           liveThoughtText = '';
@@ -194,8 +190,7 @@
           }
         } else {
           // No live element, just append as regular thought
-          var doneText = (d.text || '').substring(0, 500);
-          appendLog('[THOUGHT] ' + doneText, 'thought');
+          appendLog('[THOUGHT] ' + (d.text || ''), 'thought');
         }
         break;
 
@@ -331,8 +326,7 @@
    */
   function finalizeLiveThought() {
     if (liveThoughtEl) {
-      var finalText = liveThoughtText.substring(0, 500);
-      liveThoughtEl.textContent = liveThoughtEl.dataset.prefix + finalText;
+      liveThoughtEl.textContent = liveThoughtEl.dataset.prefix + liveThoughtText;
       liveThoughtEl.classList.remove('live-thought');
       liveThoughtEl = null;
       liveThoughtText = '';
