@@ -239,6 +239,14 @@ class ActivatorLogger:
         print(line, flush=True)
         self._broadcast("loading", {"text": text})
 
+    def loading_update(self, text: str) -> None:
+        """Update the loading indicator text without writing to log file.
+
+        Used for real-time progress updates (e.g. streaming argument size)
+        that change too frequently to be logged.
+        """
+        self._broadcast("loading_update", {"text": text})
+
     def tool_call(self, name: str, args: dict) -> None:
         """Log a tool invocation."""
         ts = self._timestamp()

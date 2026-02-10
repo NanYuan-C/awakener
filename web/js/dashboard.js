@@ -93,13 +93,25 @@
     var d = msg.data || {};
 
     // Any non-loading message removes the current loading indicator
-    if (msg.type !== 'loading') {
+    if (msg.type !== 'loading' && msg.type !== 'loading_update') {
       removeLoading();
     }
 
     switch (msg.type) {
       case 'loading':
         showLoading(d.text || 'Loading');
+        break;
+
+      case 'loading_update':
+        // Update existing loading indicator text (real-time progress)
+        if (loadingEl) {
+          var now = new Date();
+          var ts = String(now.getHours()).padStart(2, '0') + ':' +
+                   String(now.getMinutes()).padStart(2, '0') + ':' +
+                   String(now.getSeconds()).padStart(2, '0');
+          loadingEl.dataset.prefix = '[' + ts + '] ' + (d.text || '');
+          loadingEl.textContent = loadingEl.dataset.prefix + '.'.repeat(loadingDots);
+        }
         break;
 
       case 'status':

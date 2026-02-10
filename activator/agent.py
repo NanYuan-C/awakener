@@ -320,6 +320,7 @@ def _consume_stream(
     reasoning = ""
     tool_calls_map = {}  # index -> {"id": str, "name": str, "arguments": str}
     tool_calls_announced = False  # Whether we've notified the frontend
+    total_args_chars = 0  # Total chars across all tool call arguments
 
     for chunk in response:
         if not chunk.choices:
@@ -362,6 +363,14 @@ def _consume_stream(
                         tool_calls_map[idx]["name"] = tc_delta.function.name
                     if tc_delta.function.arguments:
                         tool_calls_map[idx]["arguments"] += tc_delta.function.arguments
+                        total_args_chars += len(tc_delta.function.arguments)
+
+                        # Broadcast real-time progress to frontend
+                        if logger:
+                            name = tool_calls_map[idx]["name"] or "..."
+                            logger.loading_update(
+                                f"[LLM] Generating {name} ({total_args_chars} chars)"
+                            )
 
         # Check for stream end
         if choice.finish_reason:
