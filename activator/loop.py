@@ -353,6 +353,18 @@ def run_activation_loop(
         round_start_time = time.time()
         logger.round_start(round_num)
 
+        # Reload agent settings each round so web-console changes take
+        # effect without restarting the agent.
+        try:
+            from server.config import ConfigManager
+            _live_cfg = ConfigManager(project_dir).load().get("agent", {})
+            max_tool_calls = _live_cfg.get("max_tool_calls", max_tool_calls)
+            shell_timeout = _live_cfg.get("shell_timeout", shell_timeout)
+            max_output = _live_cfg.get("max_output_chars", max_output)
+            interval = _live_cfg.get("interval", interval)
+        except Exception:
+            pass  # Keep previous values if reload fails
+
         if state_callback:
             state_callback({"state": "running", "round": round_num})
 
