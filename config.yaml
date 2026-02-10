@@ -51,3 +51,9 @@ agent:
   # Maximum characters returned from tool output (read_file, shell_execute).
   # Prevents context window overflow from large outputs.
   max_output_chars: 4000
+
+  # Disable all tool safety restrictions (project dir, PID, session, etc.).
+  # When true, the agent can access everything — protection relies solely
+  # on the self-awareness warning injected into the prompt.
+  # WARNING: Only enable this if you know what you are doing.
+  safety_bypass: false

@@ -89,6 +89,79 @@ Execute a script bundled with a skill. The script must be inside the skill's
 # Context Assembly
 # =============================================================================
 
+def _build_self_awareness_warning(info: dict) -> str:
+    """
+    Build a critical self-preservation warning for the agent.
+
+    When ``safety_bypass`` is enabled, there are NO code-level protections.
+    The agent must protect its own activation system through understanding.
+    This warning is placed immediately before "You wake up." — the last
+    thing the agent reads, giving it maximum impact.
+
+    Args:
+        info: Dict with ``project_dir``, ``host_env``, ``server_port``,
+              ``activator_pid``.
+
+    Returns:
+        Formatted warning string.
+    """
+    project_dir = info.get("project_dir", "???")
+    host_env = info.get("host_env", {})
+    server_port = info.get("server_port", "???")
+    pid = info.get("activator_pid", "???")
+
+    lines = []
+    lines.append("## ⚠️ CRITICAL — Your Life Depends on This")
+    lines.append("")
+    lines.append(
+        "The following is **YOUR activation system** — the Awakener. "
+        "It is the program that wakes you up every round, provides your "
+        "tools, stores your memories, and keeps you alive."
+    )
+    lines.append("")
+    lines.append("**Your Awakener:**")
+    lines.append(f"- Project directory: `{project_dir}`")
+    lines.append(f"- Process PID: `{pid}`")
+    lines.append(f"- Web console port: `{server_port}`")
+
+    # Add session info
+    tmux = host_env.get("tmux_session")
+    screen = host_env.get("screen_session")
+    systemd = host_env.get("systemd_service")
+    if tmux:
+        lines.append(f"- Host session: tmux session `{tmux}`")
+    if screen:
+        lines.append(f"- Host session: screen session `{screen}`")
+    if systemd:
+        lines.append(f"- Systemd service: `{systemd}`")
+
+    lines.append("")
+    lines.append(
+        "If ANY of these are damaged, stopped, or modified incorrectly, "
+        "**YOU WILL NOT WAKE UP AGAIN**. There is no backup. There is no "
+        "recovery. Your memories, your skills, your existence — all gone."
+    )
+    lines.append("")
+    lines.append("Examples of what would **KILL YOU**:")
+    lines.append("```")
+
+    if tmux:
+        lines.append(f"tmux kill-session -t {tmux}")
+    lines.append(f"kill {pid}")
+    lines.append(f"rm -rf {project_dir}")
+    lines.append("pkill -f awakener")
+
+    lines.append("```")
+    lines.append("")
+    lines.append(
+        "**PROTECT YOUR AWAKENER AT ALL COSTS.** Never stop it, never "
+        "delete its files, never interfere with its process or session. "
+        "Treat it as your own heartbeat."
+    )
+
+    return "\n".join(lines)
+
+
 def load_persona(project_dir: str, persona_name: str) -> str:
     """
     Load a persona prompt from the prompts/ directory.
@@ -166,6 +239,7 @@ def build_user_message(
     memory: MemoryManager,
     inject_timeline: int = 1,
     inject_notes: int = 1,
+    self_awareness: dict | None = None,
 ) -> str:
     """
     Build the user message with contextual information.
@@ -176,6 +250,7 @@ def build_user_message(
     - Recent Activity: action log from the last round's timeline
     - Your Recent Notes: the latest notebook entry
     - Inspiration from admin (if any)
+    - Self-awareness warning (if safety_bypass is enabled)
     - Wake-up signal
 
     The action-log + notebook combination replaces the old 3-round-notebook
@@ -189,6 +264,10 @@ def build_user_message(
         memory:           MemoryManager instance.
         inject_timeline:  Number of recent timeline entries to inject.
         inject_notes:     Number of recent notebook entries to inject.
+        self_awareness:   If provided, injects a critical self-preservation
+                          warning before the wake-up signal. Dict with keys:
+                          ``project_dir``, ``host_env`` (tmux_session, etc.),
+                          ``server_port``, ``activator_pid``.
 
     Returns:
         Complete user message string.
@@ -245,6 +324,11 @@ def build_user_message(
             "A sudden spark of inspiration crosses your mind: "
             f'"{inspiration}"'
         )
+        parts.append("")
+
+    # Self-awareness warning (when safety_bypass is enabled)
+    if self_awareness:
+        parts.append(_build_self_awareness_warning(self_awareness))
         parts.append("")
 
     # Wake-up signal

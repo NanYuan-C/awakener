@@ -307,6 +307,7 @@ def run_activation_loop(
     shell_timeout = agent_config.get("shell_timeout", 30)
     max_output = agent_config.get("max_output_chars", 4000)
     persona = "default"  # Single global prompt (always default.md)
+    safety_bypass = agent_config.get("safety_bypass", False)
 
     # API key: try environment variable based on model provider
     api_key = _resolve_api_key(model)
@@ -337,9 +338,11 @@ def run_activation_loop(
     host_env["server_port"] = web_config.get("port", 8080)
 
     logger.info(f"[START] Activator started | Model: {model} | Home: {agent_home}")
+    if safety_bypass:
+        logger.info("[START] ⚠️  SAFETY BYPASS ENABLED — all tool restrictions disabled")
     if host_env:
         parts = [f"{k}={v}" for k, v in host_env.items()]
-        logger.info(f"[START] Host protection: {', '.join(parts)}")
+        logger.info(f"[START] Host env: {', '.join(parts)}")
     logger.info(f"[START] Interval: {interval}s | Tool budget: {max_tool_calls} | Resume at round {round_num}")
 
     if state_callback:
@@ -355,7 +358,21 @@ def run_activation_loop(
 
         # Build context messages
         system_msg = build_system_message(project_dir, persona, skills_dir)
-        user_msg = build_user_message(round_num, max_tool_calls, memory)
+
+        # When safety_bypass is on, inject self-awareness warning
+        awareness = None
+        if safety_bypass:
+            awareness = {
+                "project_dir": project_dir,
+                "host_env": host_env,
+                "server_port": host_env.get("server_port", "???"),
+                "activator_pid": activator_pid,
+            }
+
+        user_msg = build_user_message(
+            round_num, max_tool_calls, memory,
+            self_awareness=awareness,
+        )
 
         messages = [
             {"role": "system", "content": system_msg},
@@ -379,6 +396,7 @@ def run_activation_loop(
             current_round=round_num,
             host_env=host_env,
             skills_dir=skills_dir,
+            bypass_restrictions=safety_bypass,
         )
 
         # Run one activation round

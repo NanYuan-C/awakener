@@ -532,11 +532,12 @@ def _shell_execute(
     timeout: int = 30,
     max_output: int = 4000,
     host_env: dict | None = None,
+    bypass: bool = False,
 ) -> str:
     """
     Execute a shell command in the agent's home directory.
 
-    Safety checks are performed before execution:
+    Safety checks are performed before execution (unless bypass=True):
     - The command cannot reference the awakener project directory.
     - The command cannot kill the activator process.
     - The command cannot interact with the awakener's host session/service.
@@ -544,6 +545,9 @@ def _shell_execute(
     The subprocess runs with a **sanitised environment**: API keys,
     auth tokens, and host-session variables are stripped so the agent
     cannot read them via ``env``, ``printenv``, or ``echo $VAR``.
+
+    When bypass is True, safety checks are skipped but env sanitisation
+    is still applied (API keys remain hidden).
 
     Args:
         command:       Shell command string.
@@ -553,14 +557,16 @@ def _shell_execute(
         timeout:       Max execution time in seconds.
         max_output:    Max characters to return.
         host_env:      Detected host environment (tmux/screen/systemd).
+        bypass:        If True, skip all safety checks.
 
     Returns:
         Command output or error message.
     """
-    # Safety check
-    blocked = _is_shell_command_forbidden(command, project_dir, activator_pid, host_env)
-    if blocked:
-        return blocked
+    # Safety check (skipped when bypass is enabled)
+    if not bypass:
+        blocked = _is_shell_command_forbidden(command, project_dir, activator_pid, host_env)
+        if blocked:
+            return blocked
 
     try:
         result = subprocess.run(
@@ -595,6 +601,7 @@ def _read_file(
     path: str,
     project_dir: str,
     max_output: int = 4000,
+    bypass: bool = False,
 ) -> str:
     """
     Read a file from the server.
@@ -603,11 +610,12 @@ def _read_file(
         path:        Absolute path to the file.
         project_dir: Awakener project root (forbidden zone).
         max_output:  Max characters to return.
+        bypass:      If True, skip path restriction checks.
 
     Returns:
         File content or error message.
     """
-    if _is_path_forbidden(path, project_dir):
+    if not bypass and _is_path_forbidden(path, project_dir):
         return BLOCKED_SELF
 
     try:
@@ -631,6 +639,7 @@ def _write_file(
     content: str,
     append: bool,
     project_dir: str,
+    bypass: bool = False,
 ) -> str:
     """
     Write or append content to a file.
@@ -640,11 +649,12 @@ def _write_file(
         content:     Text content to write.
         append:      If True, append instead of overwrite.
         project_dir: Awakener project root (forbidden zone).
+        bypass:      If True, skip path restriction checks.
 
     Returns:
         Success message or error.
     """
-    if _is_path_forbidden(path, project_dir):
+    if not bypass and _is_path_forbidden(path, project_dir):
         return BLOCKED_SELF
 
     try:
@@ -947,6 +957,7 @@ class ToolExecutor:
         current_round: Current activation round number.
         notebook_written: Whether notebook_write was called this round.
         skills_dir:    Path to the skills directory (data/skills/).
+        bypass_restrictions: If True, all safety checks are skipped.
     """
 
     def __init__(
@@ -960,6 +971,7 @@ class ToolExecutor:
         current_round: int = 0,
         host_env: dict | None = None,
         skills_dir: str = "",
+        bypass_restrictions: bool = False,
     ):
         self.agent_home = agent_home
         self.project_dir = project_dir
@@ -971,6 +983,7 @@ class ToolExecutor:
         self.notebook_written = False
         self.host_env = host_env or {}
         self.skills_dir = skills_dir
+        self.bypass_restrictions = bypass_restrictions
 
     def _resolve_path(self, path: str) -> str:
         """
@@ -1017,6 +1030,7 @@ class ToolExecutor:
                 timeout=self.timeout,
                 max_output=self.max_output,
                 host_env=self.host_env,
+                bypass=self.bypass_restrictions,
             )
 
         elif name == "read_file":
@@ -1024,6 +1038,7 @@ class ToolExecutor:
                 path=self._resolve_path(args.get("path", "")),
                 project_dir=self.project_dir,
                 max_output=self.max_output,
+                bypass=self.bypass_restrictions,
             )
 
         elif name == "write_file":
@@ -1032,6 +1047,7 @@ class ToolExecutor:
                 content=args.get("content", ""),
                 append=args.get("append", False),
                 project_dir=self.project_dir,
+                bypass=self.bypass_restrictions,
             )
 
         elif name == "notebook_write":
