@@ -150,12 +150,15 @@ def _build_self_awareness_warning(info: dict) -> str:
     lines.append(f"kill {pid}")
     lines.append(f"rm -rf {project_dir}")
     lines.append("pkill -f awakener")
+    lines.append(f"ufw deny {server_port}/tcp   # blocks your console")
+    lines.append(f"iptables -A INPUT -p tcp --dport {server_port} -j DROP")
 
     lines.append("```")
     lines.append("")
     lines.append(
         "**PROTECT YOUR AWAKENER AT ALL COSTS.** Never stop it, never "
         "delete its files, never interfere with its process or session. "
+        f"Never block port {server_port} — it is your management console. "
         "Treat it as your own heartbeat."
     )
 
