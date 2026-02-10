@@ -113,53 +113,25 @@ TOOLS_SCHEMA = [
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "notebook_write",
-            "description": (
-                "Save your note for this activation round. "
-                "Write down your progress, discoveries, plans for next round, "
-                "and anything you want to remember. "
-                "You MUST call this tool at least once before the round ends."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "content": {
-                        "type": "string",
-                        "description": (
-                            "Your note content for this round. "
-                            "Include what you did, what you learned, "
-                            "and what you plan to do next."
-                        ),
-                    }
-                },
-                "required": ["content"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "notebook_read",
-            "description": (
-                "Read your note from a specific historical activation round. "
-                "Your recent 3 rounds are already shown to you automatically. "
-                "Use this tool to look up older rounds."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "round": {
-                        "type": "integer",
-                        "description": "The round number to read (e.g. 1, 5, 42)",
-                    }
-                },
-                "required": ["round"],
-            },
-        },
-    },
+    # -- notebook_write and notebook_read are temporarily disabled --
+    # The agent now manages its own long-term memory via files in its
+    # home directory, guided by the "醒来提醒.md" wake-up note.
+    # These tools may be re-enabled or removed in a future version.
+    #
+    # {
+    #     "type": "function",
+    #     "function": {
+    #         "name": "notebook_write",
+    #         ...
+    #     },
+    # },
+    # {
+    #     "type": "function",
+    #     "function": {
+    #         "name": "notebook_read",
+    #         ...
+    #     },
+    # },
     {
         "type": "function",
         "function": {

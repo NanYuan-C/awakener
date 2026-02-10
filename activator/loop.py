@@ -35,6 +35,7 @@ from activator.memory import MemoryManager
 from activator.tools import ToolExecutor, detect_host_env
 from activator.context import build_system_message, build_user_message
 from activator.agent import run_round
+from activator.wakeup_note import ensure_wakeup_note
 
 
 # =============================================================================
@@ -336,6 +337,9 @@ def run_activation_loop(
     # Ensure agent home directory exists
     os.makedirs(agent_home, exist_ok=True)
 
+    # Ensure the wake-up note exists in agent home
+    ensure_wakeup_note(agent_home)
+
     # Resume round counter from previous session
     round_num = memory.get_last_round_number() + 1
     activator_pid = os.getpid()
@@ -393,6 +397,7 @@ def run_activation_loop(
 
         user_msg = build_user_message(
             round_num, max_tool_calls, memory,
+            agent_home=agent_home,
             self_awareness=awareness,
         )
 
@@ -403,8 +408,7 @@ def run_activation_loop(
 
         logger.info(
             f"[CONTEXT] Persona: {persona} | "
-            f"Timeline: {len(memory.get_recent_timeline(count=1))} | "
-            f"Notes: {len(memory.get_recent_notes(count=1))}"
+            f"Timeline: {len(memory.get_recent_timeline(count=1))}"
         )
 
         # Create tool executor for this round
@@ -433,11 +437,6 @@ def run_activation_loop(
 
         # Calculate duration
         duration = time.time() - round_start_time
-
-        # Auto-record minimal notebook if agent forgot
-        if not result.notebook_saved:
-            logger.info("[WARN] Agent did not save notebook this round. Auto-recording minimal note.")
-            memory.write_notebook(round_num, "(auto-saved: agent did not write notebook this round)")
 
         # Record to timeline
         memory.append_timeline(

@@ -243,17 +243,16 @@ def _extract_action_log(messages: list[dict]) -> str:
 # Budget Hint Messages
 # =============================================================================
 
-def _budget_hint(used: int, normal_limit: int, notebook_written: bool) -> str:
+def _budget_hint(used: int, normal_limit: int) -> str:
     """
     Generate a system hint about remaining tool budget.
 
     These hints are prepended to tool results so the agent is aware
-    of how many calls it has left and whether it should save its notebook.
+    of how many calls it has left.
 
     Args:
         used:             Number of tools used so far.
         normal_limit:     The normal budget limit.
-        notebook_written: Whether notebook_write has been called.
 
     Returns:
         A hint string to prepend to the tool result.
@@ -261,30 +260,21 @@ def _budget_hint(used: int, normal_limit: int, notebook_written: bool) -> str:
     remaining = normal_limit - used
 
     if used >= normal_limit:
-        if notebook_written:
-            return (
-                f"[System: Tool budget exhausted ({used}/{normal_limit}). "
-                "Notebook saved. Please stop calling tools and let the round end.]"
-            )
-        else:
-            return (
-                f"[System: Tool budget exhausted ({used}/{normal_limit}). "
-                "Only notebook_write is allowed now. "
-                "Save your notes immediately!]"
-            )
+        return (
+            f"[System: Tool budget exhausted ({used}/{normal_limit}). "
+            "Please stop calling tools and let the round end.]"
+        )
 
     if remaining <= 3:
-        save_hint = "" if notebook_written else " Remember to save your notebook!"
         return (
             f"[System: {used}/{normal_limit} tools used, "
-            f"only {remaining} left!{save_hint}]"
+            f"only {remaining} left! Wrap up now.]"
         )
 
     if remaining <= 8:
-        save_hint = "" if notebook_written else " Start wrapping up and save your notebook."
         return (
             f"[System: {used}/{normal_limit} tools used, "
-            f"{remaining} remaining.{save_hint}]"
+            f"{remaining} remaining. Start wrapping up.]"
         )
 
     return f"[System: {used}/{normal_limit} tools used, {remaining} remaining]"
@@ -419,7 +409,7 @@ def run_round(
         RoundResult with tools_used, notebook_saved, summary, and error.
     """
     total_tool_calls = 0
-    hard_limit = normal_limit + 5  # Extra buffer for forced notebook write
+    hard_limit = normal_limit + 3  # Small buffer so LLM can gracefully stop
 
     while total_tool_calls < hard_limit:
         # -- Notify dashboard that LLM is being called --
@@ -527,7 +517,7 @@ def run_round(
                         "or use shell_execute with 'cat << EOF > file')"
                     )
                     total_tool_calls += 1
-                    hint = _budget_hint(total_tool_calls, normal_limit, tool_executor.notebook_written)
+                    hint = _budget_hint(total_tool_calls, normal_limit)
                     messages.append({
                         "role": "tool",
                         "tool_call_id": call_id,
@@ -542,27 +532,19 @@ def run_round(
 
             # -- Budget enforcement --
             if total_tool_calls >= normal_limit:
-                # Over budget: only notebook_write allowed
-                if func_name != "notebook_write":
-                    if tool_executor.notebook_written:
-                        result = (
-                            f"[System: Tool budget exhausted ({total_tool_calls}/{normal_limit}). "
-                            "Notebook already saved. Please stop calling tools.]"
-                        )
-                    else:
-                        result = (
-                            f"[System: Tool budget exhausted ({total_tool_calls}/{normal_limit}). "
-                            "You must call notebook_write now to save your progress.]"
-                        )
-                    total_tool_calls += 1
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": call_id,
-                        "content": result,
-                    })
-                    if logger:
-                        logger.tool_result(result)
-                    continue
+                result = (
+                    f"[System: Tool budget exhausted ({total_tool_calls}/{normal_limit}). "
+                    "Please stop calling tools and let the round end.]"
+                )
+                total_tool_calls += 1
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": result,
+                })
+                if logger:
+                    logger.tool_result(result)
+                continue
 
             # -- Execute the tool (with loading indicator) --
             if logger:
@@ -571,7 +553,7 @@ def run_round(
             total_tool_calls += 1
 
             # Prepend budget hint
-            hint = _budget_hint(total_tool_calls, normal_limit, tool_executor.notebook_written)
+            hint = _budget_hint(total_tool_calls, normal_limit)
             messages.append({
                 "role": "tool",
                 "tool_call_id": call_id,
