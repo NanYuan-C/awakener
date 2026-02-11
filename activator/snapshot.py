@@ -269,8 +269,10 @@ the original language (Chinese, English, or whatever the agent used).
 humor, creativity, unexpected insights, poetic expression, or anything \
 genuinely fun/shareable — the kind of thing you'd want to post on social media.
     - What does NOT qualify: routine status reports, technical descriptions, \
-echoing user input, or generic observations.
-    - If nothing stands out, simply omit the `quote` field entirely.
+echoing user input, generic observations, or mundane plans like "let me check X".
+    - **Most rounds will NOT have a quote.** Only include one when the passage \
+is truly remarkable. If you have to hesitate whether it's good enough, skip it. \
+Omit the `quote` field entirely — do NOT force a low-quality quote.
 
 ## Delta YAML Schema
 
