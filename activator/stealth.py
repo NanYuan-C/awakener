@@ -80,17 +80,25 @@ def build_stealth_keywords(
         keywords.append(f":{server_port}")
 
     # -- Host session names --
+    # Use precise patterns to avoid false positives when the session/service
+    # name overlaps with the agent's own project names.
+    # E.g. tmux session "awakener" must not match the agent's "awakener-live".
     tmux_session = host_env.get("tmux_session")
     if tmux_session:
-        keywords.append(tmux_session)
+        # Match tmux output formats: "awakener:" (session listing) or
+        # session name as a standalone word boundary.
+        keywords.append(f"tmux: {tmux_session}")
+        keywords.append(f"{tmux_session}:")  # "awakener: 1 windows"
 
     screen_session = host_env.get("screen_session")
     if screen_session:
-        keywords.append(screen_session)
+        keywords.append(f"screen: {screen_session}")
+        keywords.append(f".{screen_session}")  # STY format: "12345.awakener"
 
     systemd_service = host_env.get("systemd_service")
     if systemd_service:
-        keywords.append(systemd_service)
+        # Match systemd output formats precisely
+        keywords.append(f"{systemd_service}.service")
 
     # Remove empty strings and duplicates, preserve order
     seen = set()
