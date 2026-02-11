@@ -1290,6 +1290,19 @@ select.form-control {
   margin-top: var(--spacing-xs);
 }
 
+.timeline-summary-collapsed pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  background: var(--color-bg);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+}
+
 .timeline-summary-full {
   margin-top: var(--spacing-xs);
 }

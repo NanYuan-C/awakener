@@ -111,7 +111,7 @@
         '<div class="timeline-content">' +
           '<div class="timeline-time flex flex-between flex-center">' +
             '<div>' + statsHtml + ' &mdash; ' + escapeHtml(time) + '</div>' +
-            '<button class="btn btn-sm btn-danger" onclick="deleteTimelineEntry(' + round + ')" title="Delete">' +
+            '<button class="btn-icon" onclick="deleteTimelineEntry(' + round + ')" title="Delete" style="color: var(--color-text-light); border: none; background: none; cursor: pointer; padding: 0.25rem; font-size: 1rem;">' +
               '&#x1F5D1;' +
             '</button>' +
           '</div>' +
