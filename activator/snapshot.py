@@ -264,11 +264,14 @@ no new output), use ONLY the `routine` tag.
 11. **quote** (optional) — If the agent produced something genuinely \
 striking in its own thinking or output, include a `quote` field inside \
 the `activity` block. Rules for quotes:
-    - Must be a **verbatim excerpt** from the agent's OWN original output \
-(its [THOUGHT] blocks or final text). NEVER quote user inspirations, \
-system messages, or command outputs — only the agent's own words.
+    - Must be **copied word-for-word** from the agent's [THOUGHT] blocks or \
+final text in the action log above. You MUST be able to find the exact quote \
+in the action log. NEVER fabricate, paraphrase, summarize, or compose a new \
+quote — if you cannot point to the exact words in the log, omit the quote.
     - **NEVER translate.** Copy the exact original text as-is, preserving \
 the original language (Chinese, English, or whatever the agent used).
+    - NEVER quote user inspirations, system messages, or command outputs — \
+only the agent's own words from [THOUGHT] or final output.
     - If multiple interesting passages exist, pick the single MOST striking one.
     - Can be up to ~5 sentences. Prefer a complete, self-contained passage.
     - **Most rounds will NOT have a quote.** Only include one when the passage \
