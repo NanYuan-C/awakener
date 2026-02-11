@@ -665,14 +665,24 @@ select.form-control {
 
 .modal-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   margin-bottom: var(--spacing-md);
+  gap: var(--spacing-sm);
 }
 
 .modal-header h3 {
   font-size: var(--font-size-xl);
   font-weight: 600;
+  flex: 1;
+}
+
+.modal-header-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-top: 2px;
 }
 
 .modal-close {
@@ -683,13 +693,16 @@ select.form-control {
   color: var(--color-text-light);
   padding: 0;
   line-height: 1;
+  flex-shrink: 0;
 }
 
 .modal-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   gap: var(--spacing-sm);
   margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--color-border);
 }
 
 @keyframes fade-in {

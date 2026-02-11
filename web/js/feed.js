@@ -215,7 +215,7 @@
 
     try {
       var data = await api.get('/api/timeline/' + round);
-      renderRoundDetail(data, body);
+      renderRoundDetail(data, title, body);
       footer.style.display = '';
     } catch (e) {
       body.innerHTML =
@@ -250,115 +250,31 @@
   };
 
   /**
-   * Render the timeline detail inside the modal body.
+   * Render the timeline detail: stats in header, full summary in body.
    */
-  function renderRoundDetail(entry, container) {
+  function renderRoundDetail(entry, titleContainer, bodyContainer) {
+    var round = entry.round || '?';
     var tools = entry.tools_used || 0;
     var duration = entry.duration ? entry.duration.toFixed(1) + 's' : '?';
     var time = formatTime(entry.timestamp);
     var summary = entry.summary || '';
 
-    var statsHtml =
-      '<div class="flex gap-sm flex-wrap flex-center mb-md">' +
+    // Header: Round number + stats
+    titleContainer.innerHTML =
+      'Round ' + round +
+      '<div class="modal-header-stats">' +
         '<span class="badge badge-info">Tools: ' + tools + '</span> ' +
         '<span class="badge">' + escapeHtml(duration) + '</span> ' +
         '<span class="text-xs text-muted">' + escapeHtml(time) + '</span>' +
       '</div>';
 
-    var itemId = 'modal-round-' + (entry.round || 0);
-    var collapsedHtml = buildCollapsedView(summary);
-    var fullHtml = buildFullView(summary);
-
-    container.innerHTML =
-      statsHtml +
-      '<div id="' + itemId + '-collapsed">' + collapsedHtml + '</div>' +
-      '<div id="' + itemId + '-full" style="display:none">' + fullHtml + '</div>' +
-      '<a href="javascript:void(0)" class="timeline-toggle" onclick="toggleDetail(\'' + itemId + '\')">' +
-        '<span data-i18n="feed.expand">Expand</span>' +
-      '</a>';
-  }
-
-  // =========================================================================
-  // Summary Rendering (ported from timeline.js)
-  // =========================================================================
-
-  /**
-   * Build collapsed view: first thought (without [Thinking] tag) +
-   * first 10 lines of formal output, separated by \n\n...\n\n.
-   */
-  function buildCollapsedView(summary) {
-    if (!summary) return '<p class="text-muted">(no content)</p>';
-
-    var lines = summary.split('\n');
-    var parts = [];
-
-    // Extract first [Thinking] content without the tag
-    for (var i = 0; i < lines.length; i++) {
-      if (lines[i].includes('[Thinking]')) {
-        var match = lines[i].match(/\[Thinking\]\s*(.*)/);
-        if (match && match[1]) {
-          parts.push(match[1].trim());
-          break;
-        }
-      }
-    }
-
-    // Extract formal output: everything AFTER the last [Thinking] line
-    var lastThinkingIdx = -1;
-    for (var j = lines.length - 1; j >= 0; j--) {
-      if (/\[Thinking\]/.test(lines[j])) {
-        lastThinkingIdx = j;
-        break;
-      }
-    }
-
-    var formalLines = [];
-    for (var k = lastThinkingIdx + 1; k < lines.length; k++) {
-      if (lines[k].trim() === '' && formalLines.length === 0) continue;
-      formalLines.push(lines[k]);
-    }
-
-    if (formalLines.length > 0) {
-      parts.push(formalLines.slice(0, 10).join('\n').trim());
-    }
-
-    if (parts.length === 0) {
-      return '<p class="text-muted">(no content)</p>';
-    }
-
-    var text = parts.join('\n\n...\n\n') + '\n...';
-    return '<pre class="timeline-summary">' + escapeHtml(text) + '</pre>';
-  }
-
-  /**
-   * Build full view: entire summary text.
-   */
-  function buildFullView(summary) {
-    if (!summary) return '<p class="text-muted">(no content)</p>';
-    return '<pre class="timeline-summary">' + escapeHtml(summary) + '</pre>';
-  }
-
-  /**
-   * Toggle collapsed/expanded in the modal.
-   */
-  window.toggleDetail = function(id) {
-    var collapsed = document.getElementById(id + '-collapsed');
-    var full = document.getElementById(id + '-full');
-    var link = collapsed ? collapsed.parentElement.querySelector('.timeline-toggle') : null;
-    if (!collapsed || !full) return;
-
-    if (full.style.display === 'none') {
-      collapsed.style.display = 'none';
-      full.style.display = '';
-      if (link) link.innerHTML = '<span data-i18n="feed.collapse">Collapse</span>';
+    // Body: full summary (no collapse/expand)
+    if (!summary) {
+      bodyContainer.innerHTML = '<p class="text-muted">(no content)</p>';
     } else {
-      collapsed.style.display = '';
-      full.style.display = 'none';
-      if (link) link.innerHTML = '<span data-i18n="feed.expand">Expand</span>';
+      bodyContainer.innerHTML = '<pre class="timeline-summary">' + escapeHtml(summary) + '</pre>';
     }
-
-    if (typeof i18n !== 'undefined') i18n.apply();
-  };
+  }
 
   // -- Keyboard: ESC closes modal -------------------------------------------
   document.addEventListener('keydown', function(e) {
