@@ -11,7 +11,7 @@ The snapshot captures:
     - Important documents
     - System environment overview
     - Known issues discovered during the round
-    - Recent round summaries (sliding window of last 50 rounds)
+    - Activity feed (recent round activities, sliding window of last 50)
 
 Workflow:
     1. After each round, the activator calls ``update_snapshot()``
@@ -32,6 +32,7 @@ Storage: data/snapshot.yaml (YAML for readability and LLM compatibility)
 """
 
 import copy
+import json
 import os
 import yaml
 import litellm
@@ -203,15 +204,9 @@ def render_snapshot_markdown(snapshot: dict) -> str:
             )
         lines.append("")
 
-    # -- Recent Rounds --
-    recent_rounds = snapshot.get("recent_rounds", [])
-    if recent_rounds:
-        lines.append(f"### Recent Rounds ({len(recent_rounds)})")
-        for entry in recent_rounds:
-            r = entry.get("round", "?")
-            s = entry.get("summary", "?")
-            lines.append(f"- R{r}: {s}")
-        lines.append("")
+    # NOTE: recent_activity is stored in the snapshot but NOT injected
+    # into the agent's prompt. It is used for the web feed and future
+    # push notifications / community features.
 
     return "\n".join(lines).strip()
 
@@ -224,9 +219,11 @@ SNAPSHOT_UPDATER_PROMPT = """\
 You are a system auditor for an autonomous AI agent's Linux server.
 
 Your job: given the agent's action log from this round and the current system \
-snapshot, output the **changes** (delta) AND a **one-line round summary** in \
-YAML format. The program will merge your delta into the existing snapshot \
-automatically.
+snapshot, output TWO things in YAML format:
+1. The **changes** (delta) to the snapshot — add/update/remove only.
+2. An **activity post** summarizing this round for a social feed.
+
+The program will merge your delta into the existing snapshot automatically.
 
 ## Rules
 
@@ -245,18 +242,31 @@ log, add them. If a previous issue appears resolved, update its status to \
 7. **Output ONLY valid YAML** — no markdown fences, no explanation text. \
 The entire response must be parseable as YAML.
 8. **No changes** — if nothing in the action log warrants a snapshot update, \
-still provide the round_summary but set no_changes to true.
-9. **round_summary** — ALWAYS include a `round_summary` field: a single \
-concise sentence (max 100 chars) describing the main activities this round. \
-Focus on WHAT was done, not HOW. Examples: \
-"System health check, verified SSH status (35/hr)", \
-"Built new API endpoint for user profiles, fixed CORS config", \
-"Explored web scraping techniques, created crawler prototype".
+still provide the `activity` block but set `no_changes` to true.
+9. **activity** — ALWAYS include an `activity` block with `content` and `tags`. \
+Write `content` as a readable social-media-style post (1-3 sentences) \
+describing what the agent did this round. Then assign one or more tags:
+
+   Available tags:
+   - `routine`     — Routine maintenance or checks with no notable outcome. \
+Use this when nothing interesting or new happened.
+   - `milestone`   — A significant achievement or milestone reached.
+   - `creation`    — Built, created, or launched something new.
+   - `exploration` — Explored, researched, or learned something new.
+   - `fix`         — Fixed an important bug or resolved a significant issue.
+   - `discovery`   — Found something unexpected or interesting.
+
+   If the round was purely routine (health checks, status verification, \
+no new output), use ONLY the `routine` tag.
 
 ## Delta YAML Schema
 
 ```yaml
-round_summary: "<one-line summary of this round's main activities>"
+activity:
+  content: "<1-3 sentence readable post about this round>"
+  tags:
+    - <tag>
+
 no_changes: false    # Set to true if nothing changed; omit all sections below
 
 add:                 # New entries to append
@@ -330,7 +340,7 @@ remove:              # Entries to delete (include only the key field)
 - `environment`: direct key-value merge (no matching)
 
 Only include sections that have actual changes. Omit empty sections. \
-But ALWAYS include `round_summary`.
+But ALWAYS include the `activity` block.
 """.strip()
 
 
@@ -345,8 +355,8 @@ _SECTION_KEYS: dict[str, str] = {
 }
 
 
-# Maximum number of recent round summaries to keep in the snapshot.
-_MAX_RECENT_ROUNDS = 50
+# Maximum number of recent activity entries to keep in the snapshot.
+_MAX_RECENT_ACTIVITY = 50
 
 
 def _merge_delta(old_snapshot: dict, delta: dict, round_num: int) -> dict:
@@ -354,8 +364,8 @@ def _merge_delta(old_snapshot: dict, delta: dict, round_num: int) -> dict:
     Merge an LLM-produced delta into the existing snapshot.
 
     The delta may contain ``add``, ``update``, and ``remove`` sections,
-    plus a ``round_summary`` string.  If ``no_changes`` is true, only
-    the meta block and round summary are updated.
+    plus an ``activity`` block.  If ``no_changes`` is true, only the
+    meta block and activity are updated.
 
     Args:
         old_snapshot: The current snapshot dict (may be empty).
@@ -375,18 +385,29 @@ def _merge_delta(old_snapshot: dict, delta: dict, round_num: int) -> dict:
         datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     )
 
-    # --- Append round summary (always, even if no_changes) ---
-    round_summary = delta.get("round_summary")
-    if round_summary and isinstance(round_summary, str):
-        if "recent_rounds" not in snapshot:
-            snapshot["recent_rounds"] = []
-        snapshot["recent_rounds"].append({
-            "round": round_num,
-            "summary": round_summary.strip(),
-        })
-        # Trim to sliding window
-        if len(snapshot["recent_rounds"]) > _MAX_RECENT_ROUNDS:
-            snapshot["recent_rounds"] = snapshot["recent_rounds"][-_MAX_RECENT_ROUNDS:]
+    # --- Append activity (always, even if no_changes) ---
+    activity = delta.get("activity")
+    if activity and isinstance(activity, dict):
+        content = activity.get("content", "")
+        tags = activity.get("tags", [])
+        if isinstance(tags, str):
+            tags = [tags]
+        if content:
+            if "recent_activity" not in snapshot:
+                snapshot["recent_activity"] = []
+            snapshot["recent_activity"].append({
+                "round": round_num,
+                "timestamp": datetime.now(timezone.utc).strftime(
+                    "%Y-%m-%dT%H:%M:%SZ"
+                ),
+                "content": content.strip(),
+                "tags": [t.strip() for t in tags if isinstance(t, str)],
+            })
+            # Trim to sliding window
+            if len(snapshot["recent_activity"]) > _MAX_RECENT_ACTIVITY:
+                snapshot["recent_activity"] = (
+                    snapshot["recent_activity"][-_MAX_RECENT_ACTIVITY:]
+                )
 
     # Short-circuit: nothing else changed
     if delta.get("no_changes"):
@@ -546,6 +567,56 @@ def _parse_yaml_response(text: str) -> dict | None:
         return None
 
 
+# =============================================================================
+# Activity Feed (persistent JSONL file)
+# =============================================================================
+
+def _append_feed(data_dir: str, delta: dict, round_num: int) -> None:
+    """
+    Append this round's activity to the persistent feed file.
+
+    Each line in ``data/feed.jsonl`` is a JSON object with:
+        - round: int
+        - timestamp: ISO 8601 UTC string
+        - content: activity description
+        - tags: list of tag strings
+
+    This file is the source-of-truth for the activity feed and is
+    independent of the snapshot's sliding window. It grows indefinitely
+    and can be used for push notifications, community feeds, etc.
+
+    Args:
+        data_dir:   Path to the project's data/ directory.
+        delta:      Parsed delta dict from the LLM.
+        round_num:  Current round number.
+    """
+    activity = delta.get("activity")
+    if not activity or not isinstance(activity, dict):
+        return
+
+    content = activity.get("content", "")
+    if not content:
+        return
+
+    tags = activity.get("tags", [])
+    if isinstance(tags, str):
+        tags = [tags]
+
+    entry = {
+        "round": round_num,
+        "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "content": content.strip(),
+        "tags": [t.strip() for t in tags if isinstance(t, str)],
+    }
+
+    feed_path = os.path.join(data_dir, "feed.jsonl")
+    try:
+        with open(feed_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError:
+        pass  # Non-critical — don't crash the snapshot update
+
+
 class SnapshotUpdateError(Exception):
     """Raised when snapshot update fails on both models."""
     pass
@@ -628,8 +699,11 @@ def update_snapshot(
             no_changes = bool(delta.get("no_changes"))
             new_snapshot = _merge_delta(old_snapshot, delta, round_num)
 
-            # Save to disk
+            # Save snapshot to disk
             save_snapshot(data_dir, new_snapshot)
+
+            # Append activity to feed.jsonl (persistent feed file)
+            _append_feed(data_dir, delta, round_num)
 
             if logger:
                 if no_changes:
@@ -647,6 +721,13 @@ def update_snapshot(
                         f"{proj_count} projects, "
                         f"{issue_count} open issues"
                     )
+
+            # Log activity tags
+            activity = delta.get("activity")
+            if activity and isinstance(activity, dict) and logger:
+                tags = activity.get("tags", [])
+                tag_str = ", ".join(tags) if tags else "none"
+                logger.info(f"[ACTIVITY] #{tag_str}")
 
             return new_snapshot
 
