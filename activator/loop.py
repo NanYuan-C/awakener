@@ -376,6 +376,7 @@ def run_activation_loop(
             shell_timeout = _live_cfg.get("shell_timeout", shell_timeout)
             max_output = _live_cfg.get("max_output_chars", max_output)
             interval = _live_cfg.get("interval", interval)
+            safety_bypass = _live_cfg.get("safety_bypass", safety_bypass)
         except Exception:
             pass  # Keep previous values if reload fails
 
