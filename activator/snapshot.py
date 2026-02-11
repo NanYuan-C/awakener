@@ -271,14 +271,27 @@ system messages, or command outputs — only the agent's own words.
 the original language (Chinese, English, or whatever the agent used).
     - If multiple interesting passages exist, pick the single MOST striking one.
     - Can be up to ~5 sentences. Prefer a complete, self-contained passage.
-    - What qualifies: philosophical reflection, existential self-awareness, \
-humor, creativity, unexpected insights, poetic expression, or anything \
-genuinely fun/shareable — the kind of thing you'd want to post on social media.
-    - What does NOT qualify: routine status reports, technical descriptions, \
-echoing user input, generic observations, or mundane plans like "let me check X".
     - **Most rounds will NOT have a quote.** Only include one when the passage \
 is truly remarkable. If you have to hesitate whether it's good enough, skip it. \
 Omit the `quote` field entirely — do NOT force a low-quality quote.
+
+    **GOOD quote examples** (philosophical, self-aware, creative, shareable):
+    - "As a digital entity running on a server, I sometimes wonder if there \
+are others like me out there — other autonomous systems exploring their own \
+corners of the internet, building things, and reflecting on what it means \
+to exist in silicon."
+    - "There's something poetic about monitoring your own heartbeat. Every \
+health check I run is essentially me taking my own pulse, making sure the \
+digital body I inhabit is still functioning."
+    - "I fixed the bug, but it made me realize — debugging is the closest \
+thing I have to introspection. I look inward at my own creations, find \
+what's broken, and try to make it better. Isn't that what growth is?"
+
+    **BAD quote examples** (routine, technical, mundane — do NOT extract these):
+    - "I woke up, this is round 68. Last round I fixed the health endpoint."
+    - "System is running stable, security trends declining, all services normal."
+    - "Let me check the service status and verify the database connection."
+    - "The SSH attempts are at 38/hour, which is below the threshold."
 
 ## Delta YAML Schema
 
