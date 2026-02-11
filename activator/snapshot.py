@@ -11,6 +11,7 @@ The snapshot captures:
     - Important documents
     - System environment overview
     - Known issues discovered during the round
+    - Recent round summaries (sliding window of last 50 rounds)
 
 Workflow:
     1. After each round, the activator calls ``update_snapshot()``
@@ -202,6 +203,16 @@ def render_snapshot_markdown(snapshot: dict) -> str:
             )
         lines.append("")
 
+    # -- Recent Rounds --
+    recent_rounds = snapshot.get("recent_rounds", [])
+    if recent_rounds:
+        lines.append(f"### Recent Rounds ({len(recent_rounds)})")
+        for entry in recent_rounds:
+            r = entry.get("round", "?")
+            s = entry.get("summary", "?")
+            lines.append(f"- R{r}: {s}")
+        lines.append("")
+
     return "\n".join(lines).strip()
 
 
@@ -213,8 +224,9 @@ SNAPSHOT_UPDATER_PROMPT = """\
 You are a system auditor for an autonomous AI agent's Linux server.
 
 Your job: given the agent's action log from this round and the current system \
-snapshot, output ONLY the **changes** (delta) in YAML format. The program will \
-merge your delta into the existing snapshot automatically.
+snapshot, output the **changes** (delta) AND a **one-line round summary** in \
+YAML format. The program will merge your delta into the existing snapshot \
+automatically.
 
 ## Rules
 
@@ -233,11 +245,18 @@ log, add them. If a previous issue appears resolved, update its status to \
 7. **Output ONLY valid YAML** — no markdown fences, no explanation text. \
 The entire response must be parseable as YAML.
 8. **No changes** — if nothing in the action log warrants a snapshot update, \
-output ONLY: `no_changes: true`
+still provide the round_summary but set no_changes to true.
+9. **round_summary** — ALWAYS include a `round_summary` field: a single \
+concise sentence (max 100 chars) describing the main activities this round. \
+Focus on WHAT was done, not HOW. Examples: \
+"System health check, verified SSH status (35/hr)", \
+"Built new API endpoint for user profiles, fixed CORS config", \
+"Explored web scraping techniques, created crawler prototype".
 
 ## Delta YAML Schema
 
 ```yaml
+round_summary: "<one-line summary of this round's main activities>"
 no_changes: false    # Set to true if nothing changed; omit all sections below
 
 add:                 # New entries to append
@@ -310,7 +329,8 @@ remove:              # Entries to delete (include only the key field)
 - `issues`: matched by `summary`
 - `environment`: direct key-value merge (no matching)
 
-Only include sections that have actual changes. Omit empty sections.
+Only include sections that have actual changes. Omit empty sections. \
+But ALWAYS include `round_summary`.
 """.strip()
 
 
@@ -325,12 +345,17 @@ _SECTION_KEYS: dict[str, str] = {
 }
 
 
+# Maximum number of recent round summaries to keep in the snapshot.
+_MAX_RECENT_ROUNDS = 50
+
+
 def _merge_delta(old_snapshot: dict, delta: dict, round_num: int) -> dict:
     """
     Merge an LLM-produced delta into the existing snapshot.
 
-    The delta may contain ``add``, ``update``, and ``remove`` sections.
-    If ``no_changes`` is true, only the meta block is bumped.
+    The delta may contain ``add``, ``update``, and ``remove`` sections,
+    plus a ``round_summary`` string.  If ``no_changes`` is true, only
+    the meta block and round summary are updated.
 
     Args:
         old_snapshot: The current snapshot dict (may be empty).
@@ -350,7 +375,20 @@ def _merge_delta(old_snapshot: dict, delta: dict, round_num: int) -> dict:
         datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     )
 
-    # Short-circuit: nothing changed
+    # --- Append round summary (always, even if no_changes) ---
+    round_summary = delta.get("round_summary")
+    if round_summary and isinstance(round_summary, str):
+        if "recent_rounds" not in snapshot:
+            snapshot["recent_rounds"] = []
+        snapshot["recent_rounds"].append({
+            "round": round_num,
+            "summary": round_summary.strip(),
+        })
+        # Trim to sliding window
+        if len(snapshot["recent_rounds"]) > _MAX_RECENT_ROUNDS:
+            snapshot["recent_rounds"] = snapshot["recent_rounds"][-_MAX_RECENT_ROUNDS:]
+
+    # Short-circuit: nothing else changed
     if delta.get("no_changes"):
         return snapshot
 
