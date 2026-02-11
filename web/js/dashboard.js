@@ -271,8 +271,9 @@
     // Stop button: disabled when idle, error, or already stopping
     btnStop.disabled = !isRunning;
 
-    // Uptime timer: only run during 'running' status, pause during 'waiting'
-    if (status === 'running') {
+    // Uptime timer: run during 'running' and 'stopping' (round still active),
+    // pause during 'waiting', reset on 'idle' or 'error'.
+    if (status === 'running' || status === 'stopping') {
       if (!uptimeTimer) {
         uptimeTimer = setInterval(updateUptime, 1000);
       }
@@ -283,7 +284,7 @@
         clearInterval(uptimeTimer);
         uptimeTimer = null;
       }
-    } else if (status === 'idle' || status === 'error' || status === 'stopping') {
+    } else if (status === 'idle' || status === 'error') {
       // Reset everything
       roundStartTime = null;
       roundToolsUsed = 0;
