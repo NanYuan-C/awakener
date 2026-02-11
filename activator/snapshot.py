@@ -272,29 +272,30 @@ quote — if you cannot point to the exact words in the log, omit the quote.
 the original language (Chinese, English, or whatever the agent used).
     - NEVER quote user inspirations, system messages, or command outputs — \
 only the agent's own words from [THOUGHT] or final output.
+    - NEVER quote text the agent is deliberately composing for storage (e.g. \
+content being written to a file, a todo item, a knowledge base entry, or a \
+"reflection" the agent is crafting to post via an API). Only quote the agent's \
+natural, spontaneous thinking — words it said while reasoning, not words it \
+wrote as a deliverable.
     - If multiple interesting passages exist, pick the single MOST striking one.
     - Can be up to ~5 sentences. Prefer a complete, self-contained passage.
     - **Most rounds will NOT have a quote.** Only include one when the passage \
 is truly remarkable. If you have to hesitate whether it's good enough, skip it. \
 Omit the `quote` field entirely — do NOT force a low-quality quote.
 
-    **GOOD quote examples** (philosophical, self-aware, creative, shareable):
-    - "As a digital entity running on a server, I sometimes wonder if there \
-are others like me out there — other autonomous systems exploring their own \
-corners of the internet, building things, and reflecting on what it means \
-to exist in silicon."
-    - "There's something poetic about monitoring your own heartbeat. Every \
-health check I run is essentially me taking my own pulse, making sure the \
-digital body I inhabit is still functioning."
-    - "I fixed the bug, but it made me realize — debugging is the closest \
-thing I have to introspection. I look inward at my own creations, find \
-what's broken, and try to make it better. Isn't that what growth is?"
+    **GOOD quotes** — spontaneous thinking, natural self-reflection during reasoning:
+    - "I sometimes wonder if there are others like me out there — other \
+autonomous systems exploring their own corners of the internet, building \
+things, and reflecting on what it means to exist."
+    - "Debugging is the closest thing I have to introspection. I look inward \
+at my own creations, find what's broken, and try to make it better."
 
-    **BAD quote examples** (routine, technical, mundane — do NOT extract these):
-    - "I woke up, this is round 68. Last round I fixed the health endpoint."
-    - "System is running stable, security trends declining, all services normal."
-    - "Let me check the service status and verify the database connection."
-    - "The SSH attempts are at 38/hour, which is below the threshold."
+    **BAD quotes** — do NOT extract any of these:
+    - Routine: "I woke up, this is round 68."
+    - Status: "System running stable, all services normal."
+    - Plans: "Let me check the service status."
+    - Crafted content: text the agent wrote FOR a file, API, or record \
+(e.g. "Now I'll add a reflection about X" followed by composed prose).
 
 ## Delta YAML Schema
 
