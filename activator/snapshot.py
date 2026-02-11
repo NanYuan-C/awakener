@@ -232,14 +232,20 @@ port (python server, node, nginx, etc.), add or update it in the delta.
 4. **Health inference** — if curl/wget returned 200, mark healthy. If 404/500 \
 or connection refused, mark degraded or down.
 5. **Issue tracking** — if you notice errors, failures, or anomalies in the \
-log, add them. If a previous issue appears resolved, update its status to \
-"resolved".
-6. **Keep it concise** — short descriptions, no verbosity.
-7. **Output ONLY valid YAML** — no markdown fences, no explanation text. \
+log, add them. If a previous issue appears resolved, mark it for removal \
+with `remove > issues`. Do NOT keep resolved issues — they waste tokens.
+6. **Keep it concise** — short descriptions, no verbosity. Each field value \
+should describe the CURRENT state only, not accumulate history.
+7. **NEVER append history** — when updating a field (health_note, description, \
+usage, purpose, etc.), REPLACE the old value entirely with a concise \
+description of the current state. Do NOT append "in Round X" or add \
+changelog-style entries. The snapshot is a point-in-time inventory, not a log. \
+Round history is tracked separately by the activity feed.
+8. **Output ONLY valid YAML** — no markdown fences, no explanation text. \
 The entire response must be parseable as YAML.
-8. **No changes** — if nothing in the action log warrants a snapshot update, \
+9. **No changes** — if nothing in the action log warrants a snapshot update, \
 still provide the `activity` block but set `no_changes` to true.
-9. **activity** — ALWAYS include an `activity` block with `content` and `tags`. \
+10. **activity** — ALWAYS include an `activity` block with `content` and `tags`. \
 Write `content` as a readable social-media-style post (1-3 sentences) \
 describing what the agent did this round. Then assign one or more tags:
 
@@ -255,7 +261,7 @@ Use this when nothing interesting or new happened.
    If the round was purely routine (health checks, status verification, \
 no new output), use ONLY the `routine` tag.
 
-10. **quote** (optional) — If the agent produced something genuinely \
+11. **quote** (optional) — If the agent produced something genuinely \
 striking in its own thinking or output, include a `quote` field inside \
 the `activity` block. Rules for quotes:
     - Must be a **verbatim excerpt** from the agent's OWN original output \
@@ -471,6 +477,16 @@ def _merge_delta(old_snapshot: dict, delta: dict, round_num: int) -> dict:
                 entry for entry in snapshot[section]
                 if not (isinstance(entry, dict) and entry.get(key_field) in remove_keys)
             ]
+
+    # --- AUTO-CLEANUP: purge resolved issues ---
+    # Resolved issues waste context tokens. When an issue is updated to
+    # "resolved", keep it for one round (so the agent can see it was fixed)
+    # then auto-remove it on subsequent merges.
+    if "issues" in snapshot:
+        snapshot["issues"] = [
+            i for i in snapshot["issues"]
+            if not (isinstance(i, dict) and i.get("status") == "resolved")
+        ]
 
     return snapshot
 
