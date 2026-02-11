@@ -31,6 +31,7 @@ DeepSeek reasoner support:
 import json
 import re
 from datetime import datetime
+from typing import Callable
 
 import litellm
 from activator.tools import ToolExecutor, TOOLS_SCHEMA
@@ -375,7 +376,7 @@ def run_round(
     api_key: str | None = None,
     normal_limit: int = 20,
     logger=None,
-    tool_callback: callable | None = None,
+    tool_callback: Callable[[int], None] | None = None,
 ) -> RoundResult:
     """
     Execute one activation round: LLM <-> tool loop with streaming.
