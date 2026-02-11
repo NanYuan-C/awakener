@@ -148,6 +148,17 @@ class AgentManager:
         finally:
             if self.state != "error":
                 self.state = "idle"
+            # Notify frontend via WebSocket when thread actually exits
+            try:
+                import asyncio
+                asyncio.run_coroutine_threadsafe(
+                    self.ws.send_status(self.state, {
+                        "message": "Agent stopped" if self.state == "idle" else "Agent error"
+                    }),
+                    event_loop,
+                )
+            except Exception:
+                pass  # event loop may be closed
 
     async def start(self, config: dict) -> dict:
         """
@@ -210,20 +221,20 @@ class AgentManager:
         self._stop_event.set()
 
         await self.ws.send_status("stopping", {
-            "message": "Stop requested, finishing current round..."
+            "message": "Stop command received, agent will stop after current round completes"
         })
 
-        # Wait for thread to finish (with timeout to not block the web server)
-        if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=10)
-
-        self.state = "idle"
-        await self.ws.send_status("idle", {"message": "Agent stopped"})
+        # Don't wait for thread — it will finish in the background and
+        # broadcast "idle" via WebSocket when done. This gives instant
+        # UI feedback to the user.
         return self.status
 
     async def restart(self, config: dict) -> dict:
         """
         Restart the activator with (potentially updated) configuration.
+
+        Unlike stop(), restart must wait for the old thread to finish
+        before starting a new one to avoid duplicate threads.
 
         Args:
             config: Full configuration dict.
@@ -232,6 +243,11 @@ class AgentManager:
             Current status dict after restart.
         """
         await self.stop()
+
+        # Wait for old thread to actually exit (restart requires this)
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=120)
+
         return await self.start(config)
 
     async def send_inspiration(self, message: str, data_dir: str) -> bool:

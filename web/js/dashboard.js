@@ -236,10 +236,14 @@
       statRound.textContent = round;
     }
 
-    // Button states: running, waiting, and stopping all count as "active"
-    const isActive = (status === 'running' || status === 'waiting' || status === 'stopping');
-    btnStart.disabled = isActive;
-    btnStop.disabled = !isActive;
+    // Button states based on current status
+    const isRunning = (status === 'running' || status === 'waiting');
+    const isStopping = (status === 'stopping');
+    
+    // Start button: disabled when running, waiting, or stopping
+    btnStart.disabled = isRunning || isStopping;
+    // Stop button: disabled when idle, error, or already stopping
+    btnStop.disabled = !isRunning;
 
     // Uptime tracking
     if (isActive && !startTime) {
@@ -374,19 +378,24 @@
   window.agentAction = async function(action) {
     // Instant UI feedback for stop/restart — don't wait for server
     if (action === 'stop' || action === 'restart') {
+      // Immediately disable buttons and show stopping state
+      btnStart.disabled = true;
+      btnStop.disabled = true;
       updateStatus({status: 'stopping'});
       toast('Stopping agent, finishing current round...', 'info');
     }
 
     try {
-      await api.post('/api/agent/' + action);
+      const result = await api.post('/api/agent/' + action);
       if (action === 'start') {
         toast('Agent started', 'success');
       } else if (action === 'stop') {
-        toast('Agent stopped', 'success');
+        toast('Stop command received, agent will stop after current round completes', 'success');
       } else if (action === 'restart') {
         toast('Agent restarted', 'success');
       }
+      // Update UI with the returned status
+      updateStatus(result);
     } catch (err) {
       toast(err.message, 'error');
       // Re-fetch actual status on error to correct the UI
