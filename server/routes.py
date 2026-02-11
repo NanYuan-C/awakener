@@ -657,6 +657,26 @@ def create_router(
 
         return {"events": page, "total": total}
 
+    @router.get("/timeline/{round_num}", dependencies=[auth])
+    async def get_timeline_entry(round_num: int):
+        """
+        Get a single timeline entry by round number.
+        Used by the feed page modal to show full round details.
+        """
+        from activator.memory import MemoryManager
+
+        data_dir = os.path.join(config_manager.project_dir, "data")
+        memory = MemoryManager(data_dir)
+        entries = memory.get_all_timeline_entries()
+
+        for entry in entries:
+            if entry.get("round") == round_num:
+                return entry
+
+        raise HTTPException(
+            status_code=404, detail=f"No data found for round {round_num}"
+        )
+
     # =========================================================================
     # MEMORY ROUTES - Requires authentication
     # =========================================================================

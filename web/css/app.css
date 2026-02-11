@@ -1200,7 +1200,7 @@ select.form-control {
 
 
 /* ==========================================================================
-   11. Timeline Page
+   11. Timeline Elements (used by Feed page modal and timeline rendering)
    ========================================================================== */
 
 .timeline {
@@ -1550,6 +1550,48 @@ select.form-control {
    Feed Page
    ========================================================================== */
 
+/* -- Timeline structure --------------------------------------------------- */
+
+.feed-timeline {
+  position: relative;
+  padding-left: var(--spacing-xl);
+}
+
+.feed-timeline::before {
+  content: "";
+  position: absolute;
+  left: 11px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-border);
+}
+
+.feed-timeline-item {
+  position: relative;
+}
+
+.feed-timeline-dot {
+  position: absolute;
+  left: calc(var(--spacing-xl) * -1 + 4px);
+  top: var(--spacing-md);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: 3px solid var(--color-bg);
+  z-index: 1;
+}
+
+.dot-milestone   { background: #f59e0b; }
+.dot-creation    { background: #3b82f6; }
+.dot-exploration { background: #10b981; }
+.dot-fix         { background: #ec4899; }
+.dot-discovery   { background: #8b5cf6; }
+.dot-routine     { background: var(--color-text-light); }
+
+/* -- Card ----------------------------------------------------------------- */
+
 .feed-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -1600,6 +1642,14 @@ select.form-control {
   word-break: break-word;
 }
 
+/* -- Footer (tags + detail link) ------------------------------------------ */
+
+.feed-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .feed-tags {
   display: flex;
   flex-wrap: wrap;
@@ -1624,3 +1674,16 @@ select.form-control {
 .tag-discovery   { background: #ede9fe; color: #5b21b6; }
 .tag-routine     { background: var(--color-bg); color: var(--color-text-light); }
 .tag-default     { background: var(--color-bg); color: var(--color-text-light); }
+
+.feed-detail-link {
+  font-size: var(--font-size-sm);
+  color: var(--color-primary);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.feed-detail-link:hover {
+  text-decoration: underline;
+}

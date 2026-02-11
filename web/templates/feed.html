@@ -7,11 +7,12 @@
 <!--
   Feed Page
   =========
-  Social-media-style activity feed showing the agent's notable activities.
+  Combined activity feed with timeline-style presentation.
     - Each round produces one activity entry with content and tags
+    - Timeline vertical line and dot nodes on the left
+    - Click "View Details" to open a modal with full round data
     - Tags: routine, milestone, creation, exploration, fix, discovery
-    - Filterable by tag
-    - Lazy loading with "Load More" button
+    - Filterable by tag, lazy loading with "Load More"
 -->
 
 <!-- ====================================================================== -->
@@ -52,7 +53,7 @@
 </div>
 
 <!-- ====================================================================== -->
-<!-- Feed entries                                                           -->
+<!-- Feed entries (rendered by JS as timeline items)                        -->
 <!-- ====================================================================== -->
 <div id="feed-list">
   <div class="empty-state">
@@ -68,6 +69,24 @@
   <button class="btn btn-outline" onclick="loadMoreFeed()">
     <span data-i18n="feed.loadMore">Load More</span>
   </button>
+</div>
+
+<!-- ====================================================================== -->
+<!-- Round Detail Modal                                                     -->
+<!-- ====================================================================== -->
+<div class="modal-overlay" id="round-modal" style="display:none" onclick="closeRoundModal()">
+  <div class="modal" style="max-width: 800px;" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="round-modal-title">Round Details</h3>
+      <button class="modal-close" onclick="closeRoundModal()">&times;</button>
+    </div>
+    <div id="round-modal-body"></div>
+    <div class="modal-footer" id="round-modal-footer" style="display:none">
+      <button class="btn btn-sm btn-outline" onclick="deleteRoundFromModal()" style="color: var(--color-text-light);">
+        &#x1F5D1; <span data-i18n="feed.deleteRound">Delete Round</span>
+      </button>
+    </div>
+  </div>
 </div>
 {% endblock %}
 

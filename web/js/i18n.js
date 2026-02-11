@@ -32,7 +32,6 @@ const messages = {
       prompts: "Prompt",
       skills: "Skills",
       feed: "Feed",
-      timeline: "Timeline",
       snapshot: "Snapshot",
       logout: "Logout",
     },
@@ -189,17 +188,11 @@ const messages = {
       loading: "Loading feed...",
       loadMore: "Load More",
       noData: "No activities yet.",
-    },
-
-    // -- Timeline --
-    timeline: {
-      title: "Timeline",
-      round: "Round",
-      tools_used: "tools used",
-      duration: "duration",
-      no_data: "No timeline data yet.",
-      showMore: "Show more",
-      showLess: "Collapse",
+      viewDetails: "View Details",
+      expand: "Expand",
+      collapse: "Collapse",
+      noRoundData: "No timeline data available for this round.",
+      deleteRound: "Delete Round",
     },
 
     // -- Snapshot --
@@ -251,7 +244,6 @@ const messages = {
       prompts: "提示词",
       skills: "技能",
       feed: "动态",
-      timeline: "时间线",
       snapshot: "系统快照",
       logout: "退出",
     },
@@ -400,16 +392,11 @@ const messages = {
       loading: "加载动态中...",
       loadMore: "加载更多",
       noData: "暂无动态。",
-    },
-
-    timeline: {
-      title: "时间线",
-      round: "轮次",
-      tools_used: "工具调用",
-      duration: "耗时",
-      no_data: "暂无时间线数据。",
-      showMore: "展开全部",
-      showLess: "收起",
+      viewDetails: "查看详情",
+      expand: "展开",
+      collapse: "收起",
+      noRoundData: "此轮次暂无时间线数据。",
+      deleteRound: "删除轮次数据",
     },
 
     snapshot: {

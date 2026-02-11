@@ -180,13 +180,6 @@ def create_app(project_dir: str | None = None) -> FastAPI:
             "feed.html", {"request": request, "page_id": "feed"}
         )
 
-    @app.get("/timeline")
-    async def timeline_page(request: Request):
-        """Timeline view - chronological agent activity history."""
-        return templates.TemplateResponse(
-            "timeline.html", {"request": request, "page_id": "timeline"}
-        )
-
     @app.get("/snapshot")
     async def snapshot_page(request: Request):
         """System snapshot view - asset inventory."""

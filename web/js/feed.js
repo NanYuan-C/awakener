@@ -1,27 +1,32 @@
 /**
  * Awakener - Activity Feed Page Logic
  * =====================================
- * Loads and displays the agent's activity feed with tag filtering
- * and lazy loading.
+ * Combined activity feed with timeline-style presentation:
+ *   - Activity entries from feed.jsonl with tag filtering and lazy loading
+ *   - Timeline-style vertical line and dot nodes on the left
+ *   - Click "View Details" to open a modal with full round timeline data
+ *
+ * Depends on: api.js (global `api` object), i18n.js (global `i18n` object)
  */
 
 (function() {
   'use strict';
 
   // -- State ------------------------------------------------------------------
-  var allEntries = [];      // All loaded entries (newest first)
-  var displayedCount = 0;   // How many are currently rendered
+  var allEntries = [];
+  var displayedCount = 0;
   var currentFilter = 'all';
   var PAGE_SIZE = 20;
+  var currentModalRound = null;
 
   // -- Tag metadata -----------------------------------------------------------
   var TAG_META = {
-    milestone:   { icon: '&#x1F3C6;', label: 'Milestone',   cls: 'tag-milestone' },
-    creation:    { icon: '&#x1F528;', label: 'Creation',     cls: 'tag-creation' },
-    exploration: { icon: '&#x1F50D;', label: 'Exploration',  cls: 'tag-exploration' },
-    fix:         { icon: '&#x1F527;', label: 'Fix',          cls: 'tag-fix' },
-    discovery:   { icon: '&#x1F4A1;', label: 'Discovery',    cls: 'tag-discovery' },
-    routine:     { icon: '&#x1F504;', label: 'Routine',      cls: 'tag-routine' },
+    milestone:   { icon: '&#x1F3C6;', label: 'Milestone',   cls: 'tag-milestone',   dot: 'dot-milestone' },
+    creation:    { icon: '&#x1F528;', label: 'Creation',     cls: 'tag-creation',    dot: 'dot-creation' },
+    exploration: { icon: '&#x1F50D;', label: 'Exploration',  cls: 'tag-exploration', dot: 'dot-exploration' },
+    fix:         { icon: '&#x1F527;', label: 'Fix',          cls: 'tag-fix',         dot: 'dot-fix' },
+    discovery:   { icon: '&#x1F4A1;', label: 'Discovery',    cls: 'tag-discovery',   dot: 'dot-discovery' },
+    routine:     { icon: '&#x1F504;', label: 'Routine',      cls: 'tag-routine',     dot: 'dot-routine' },
   };
 
   // -- Helpers ----------------------------------------------------------------
@@ -36,8 +41,7 @@
   function formatTime(ts) {
     if (!ts) return '';
     try {
-      var d = new Date(ts);
-      return d.toLocaleString();
+      return new Date(ts).toLocaleString();
     } catch (e) {
       return ts;
     }
@@ -47,6 +51,20 @@
     var meta = TAG_META[tag] || { icon: '', label: tag, cls: 'tag-default' };
     return '<span class="feed-tag ' + meta.cls + '">' +
            meta.icon + ' ' + escapeHtml(meta.label) + '</span>';
+  }
+
+  /**
+   * Pick the dot color class from an entry's tags.
+   * Uses the first non-routine tag; falls back to 'dot-routine'.
+   */
+  function getDotClass(tags) {
+    if (!tags || !tags.length) return 'dot-routine';
+    for (var i = 0; i < tags.length; i++) {
+      if (tags[i] !== 'routine' && TAG_META[tags[i]]) {
+        return TAG_META[tags[i]].dot;
+      }
+    }
+    return 'dot-routine';
   }
 
   // -- Filtering --------------------------------------------------------------
@@ -63,7 +81,9 @@
     });
   }
 
-  // -- Rendering --------------------------------------------------------------
+  // =========================================================================
+  // Rendering — Feed List
+  // =========================================================================
 
   function renderEntries(entries, container) {
     for (var i = 0; i < entries.length; i++) {
@@ -75,15 +95,25 @@
 
       var isRoutine = e.tags && e.tags.indexOf('routine') !== -1;
       var cardClass = 'feed-card' + (isRoutine ? ' feed-card-routine' : '');
+      var dotClass = 'feed-timeline-dot ' + getDotClass(e.tags);
+      var round = e.round || '?';
 
       var html =
-        '<div class="' + cardClass + '">' +
-          '<div class="feed-header">' +
-            '<span class="feed-round">Round ' + (e.round || '?') + '</span>' +
-            '<span class="feed-time">' + escapeHtml(formatTime(e.timestamp)) + '</span>' +
+        '<div class="feed-timeline-item">' +
+          '<div class="' + dotClass + '"></div>' +
+          '<div class="' + cardClass + '">' +
+            '<div class="feed-header">' +
+              '<span class="feed-round">Round ' + round + '</span>' +
+              '<span class="feed-time">' + escapeHtml(formatTime(e.timestamp)) + '</span>' +
+            '</div>' +
+            '<div class="feed-content">' + escapeHtml(e.content) + '</div>' +
+            '<div class="feed-footer">' +
+              '<div class="feed-tags">' + tagsHtml + '</div>' +
+              '<a href="javascript:void(0)" class="feed-detail-link" onclick="openRoundDetail(' + round + ')">' +
+                '<span data-i18n="feed.viewDetails">View Details</span> &rsaquo;' +
+              '</a>' +
+            '</div>' +
           '</div>' +
-          '<div class="feed-content">' + escapeHtml(e.content) + '</div>' +
-          '<div class="feed-tags">' + tagsHtml + '</div>' +
         '</div>';
 
       var div = document.createElement('div');
@@ -104,31 +134,38 @@
     var filtered = getFiltered();
 
     if (filtered.length === 0) {
+      container.className = '';
       container.innerHTML =
         '<div class="empty-state">' +
           '<div class="empty-state-icon">&#x1F4E1;</div>' +
-          '<p>No activities found</p>' +
+          '<p data-i18n="feed.noData">No activities found</p>' +
         '</div>';
       loadMore.style.display = 'none';
       return;
     }
 
+    container.className = 'feed-timeline';
     var page = filtered.slice(displayedCount, displayedCount + PAGE_SIZE);
     renderEntries(page, container);
     displayedCount += page.length;
 
     loadMore.style.display = (displayedCount < filtered.length) ? '' : 'none';
+
+    if (typeof i18n !== 'undefined') i18n.apply();
   }
 
-  // -- API --------------------------------------------------------------------
+  // =========================================================================
+  // API — Load Feed
+  // =========================================================================
 
-  window.loadFeed = async function(reset) {
+  window.loadFeed = async function() {
     try {
       var data = await api.get('/api/feed');
       allEntries = data.entries || [];
       renderPage(true);
     } catch (e) {
       var container = document.getElementById('feed-list');
+      container.className = '';
       container.innerHTML =
         '<div class="empty-state">' +
           '<div class="empty-state-icon">&#x1F4E1;</div>' +
@@ -144,7 +181,6 @@
   window.setFeedFilter = function(filter) {
     currentFilter = filter;
 
-    // Update active button
     var btns = document.querySelectorAll('.filter-btn');
     for (var i = 0; i < btns.length; i++) {
       var btn = btns[i];
@@ -158,7 +194,178 @@
     renderPage(true);
   };
 
-  // -- Init -------------------------------------------------------------------
-  loadFeed(true);
+  // =========================================================================
+  // Round Detail Modal
+  // =========================================================================
+
+  /**
+   * Open the modal and fetch full timeline data for a round.
+   */
+  window.openRoundDetail = async function(round) {
+    currentModalRound = round;
+    var modal = document.getElementById('round-modal');
+    var title = document.getElementById('round-modal-title');
+    var body = document.getElementById('round-modal-body');
+    var footer = document.getElementById('round-modal-footer');
+
+    title.textContent = 'Round ' + round;
+    body.innerHTML = '<div class="text-center text-muted" style="padding:2rem">Loading...</div>';
+    footer.style.display = 'none';
+    modal.style.display = '';
+
+    try {
+      var data = await api.get('/api/timeline/' + round);
+      renderRoundDetail(data, body);
+      footer.style.display = '';
+    } catch (e) {
+      body.innerHTML =
+        '<div class="empty-state">' +
+          '<p data-i18n="feed.noRoundData">No timeline data available for this round.</p>' +
+        '</div>';
+    }
+
+    if (typeof i18n !== 'undefined') i18n.apply();
+  };
+
+  window.closeRoundModal = function() {
+    document.getElementById('round-modal').style.display = 'none';
+    currentModalRound = null;
+  };
+
+  /**
+   * Delete the current round's timeline data from inside the modal.
+   * Feed entries are independent and remain untouched.
+   */
+  window.deleteRoundFromModal = async function() {
+    if (!currentModalRound) return;
+    if (!confirm('Delete Round ' + currentModalRound + '?\nThis will remove the timeline and log data for this round.')) return;
+
+    try {
+      await api.delete('/api/timeline/' + currentModalRound);
+      if (typeof toast === 'function') toast('Round ' + currentModalRound + ' deleted', 'success');
+      closeRoundModal();
+    } catch (e) {
+      if (typeof toast === 'function') toast('Failed to delete: ' + e.message, 'error');
+    }
+  };
+
+  /**
+   * Render the timeline detail inside the modal body.
+   */
+  function renderRoundDetail(entry, container) {
+    var tools = entry.tools_used || 0;
+    var duration = entry.duration ? entry.duration.toFixed(1) + 's' : '?';
+    var time = formatTime(entry.timestamp);
+    var summary = entry.summary || '';
+
+    var statsHtml =
+      '<div class="flex gap-sm flex-wrap flex-center mb-md">' +
+        '<span class="badge badge-info">Tools: ' + tools + '</span> ' +
+        '<span class="badge">' + escapeHtml(duration) + '</span> ' +
+        '<span class="text-xs text-muted">' + escapeHtml(time) + '</span>' +
+      '</div>';
+
+    var itemId = 'modal-round-' + (entry.round || 0);
+    var collapsedHtml = buildCollapsedView(summary);
+    var fullHtml = buildFullView(summary);
+
+    container.innerHTML =
+      statsHtml +
+      '<div id="' + itemId + '-collapsed">' + collapsedHtml + '</div>' +
+      '<div id="' + itemId + '-full" style="display:none">' + fullHtml + '</div>' +
+      '<a href="javascript:void(0)" class="timeline-toggle" onclick="toggleDetail(\'' + itemId + '\')">' +
+        '<span data-i18n="feed.expand">Expand</span>' +
+      '</a>';
+  }
+
+  // =========================================================================
+  // Summary Rendering (ported from timeline.js)
+  // =========================================================================
+
+  /**
+   * Build collapsed view: first thought (without [Thinking] tag) +
+   * first 10 lines of formal output, separated by \n\n...\n\n.
+   */
+  function buildCollapsedView(summary) {
+    if (!summary) return '<p class="text-muted">(no content)</p>';
+
+    var lines = summary.split('\n');
+    var parts = [];
+
+    // Extract first [Thinking] content without the tag
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].includes('[Thinking]')) {
+        var match = lines[i].match(/\[Thinking\]\s*(.*)/);
+        if (match && match[1]) {
+          parts.push(match[1].trim());
+          break;
+        }
+      }
+    }
+
+    // Extract formal output: everything AFTER the last [Thinking] line
+    var lastThinkingIdx = -1;
+    for (var j = lines.length - 1; j >= 0; j--) {
+      if (/\[Thinking\]/.test(lines[j])) {
+        lastThinkingIdx = j;
+        break;
+      }
+    }
+
+    var formalLines = [];
+    for (var k = lastThinkingIdx + 1; k < lines.length; k++) {
+      if (lines[k].trim() === '' && formalLines.length === 0) continue;
+      formalLines.push(lines[k]);
+    }
+
+    if (formalLines.length > 0) {
+      parts.push(formalLines.slice(0, 10).join('\n').trim());
+    }
+
+    if (parts.length === 0) {
+      return '<p class="text-muted">(no content)</p>';
+    }
+
+    var text = parts.join('\n\n...\n\n') + '\n...';
+    return '<pre class="timeline-summary">' + escapeHtml(text) + '</pre>';
+  }
+
+  /**
+   * Build full view: entire summary text.
+   */
+  function buildFullView(summary) {
+    if (!summary) return '<p class="text-muted">(no content)</p>';
+    return '<pre class="timeline-summary">' + escapeHtml(summary) + '</pre>';
+  }
+
+  /**
+   * Toggle collapsed/expanded in the modal.
+   */
+  window.toggleDetail = function(id) {
+    var collapsed = document.getElementById(id + '-collapsed');
+    var full = document.getElementById(id + '-full');
+    var link = collapsed ? collapsed.parentElement.querySelector('.timeline-toggle') : null;
+    if (!collapsed || !full) return;
+
+    if (full.style.display === 'none') {
+      collapsed.style.display = 'none';
+      full.style.display = '';
+      if (link) link.innerHTML = '<span data-i18n="feed.collapse">Collapse</span>';
+    } else {
+      collapsed.style.display = '';
+      full.style.display = 'none';
+      if (link) link.innerHTML = '<span data-i18n="feed.expand">Expand</span>';
+    }
+
+    if (typeof i18n !== 'undefined') i18n.apply();
+  };
+
+  // -- Keyboard: ESC closes modal -------------------------------------------
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeRoundModal();
+  });
+
+  // -- Init -----------------------------------------------------------------
+  loadFeed();
 
 })();
