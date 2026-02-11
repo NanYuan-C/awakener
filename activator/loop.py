@@ -35,7 +35,6 @@ from activator.memory import MemoryManager
 from activator.tools import ToolExecutor, detect_host_env
 from activator.context import build_system_message, build_user_message
 from activator.agent import run_round
-from activator.knowledge import ensure_knowledge_base
 from activator.snapshot import update_snapshot, SnapshotUpdateError
 
 
@@ -316,7 +315,6 @@ def run_activation_loop(
     max_output = agent_config.get("max_output_chars", 4000)
     persona = "default"  # Single global prompt (always default.md)
     snapshot_model = agent_config.get("snapshot_model", "") or ""
-    max_index_chars = agent_config.get("max_index_chars", 2000)
 
     # API key: try environment variable based on model provider
     api_key = _resolve_api_key(model)
@@ -334,9 +332,6 @@ def run_activation_loop(
 
     # Ensure agent home directory exists
     os.makedirs(agent_home, exist_ok=True)
-
-    # Ensure knowledge base directory and index.md exist
-    ensure_knowledge_base(agent_home)
 
     # Resume round counter from previous session
     round_num = memory.get_last_round_number() + 1
@@ -374,7 +369,6 @@ def run_activation_loop(
             max_output = _live_cfg.get("max_output_chars", max_output)
             interval = _live_cfg.get("interval", interval)
             snapshot_model = _live_cfg.get("snapshot_model", "") or ""
-            max_index_chars = _live_cfg.get("max_index_chars", max_index_chars)
         except Exception:
             pass  # Keep previous values if reload fails
 
@@ -402,11 +396,9 @@ def run_activation_loop(
             except Exception:
                 pass  # Event loop may be closed
 
-        # Build context messages (includes snapshot + skills + knowledge base)
+        # Build context messages (includes snapshot + skills)
         system_msg = build_system_message(
             project_dir, persona, skills_dir, data_dir,
-            agent_home=agent_home,
-            max_index_chars=max_index_chars,
         )
 
         user_msg = build_user_message(

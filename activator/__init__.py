@@ -10,7 +10,6 @@ This package contains the core logic for the agent's activation loop:
     - memory.py    : Timeline + inspiration management
     - context.py   : System/user prompt assembly
     - snapshot.py  : System snapshot (asset inventory) updater
-    - knowledge.py : Agent's self-maintained knowledge base
 
 Usage:
     from activator import run_activation_loop

@@ -58,9 +58,3 @@ agent:
   # Prevents context window overflow from large outputs.
   max_output_chars: 4000
 
-  # Maximum characters injected from the knowledge base index (knowledge/index.md).
-  # The agent's index.md is read and injected into the prompt each round.
-  # If the file exceeds this limit, it is truncated with a warning.
-  # Lower values save tokens; higher values give the agent more room.
-  max_index_chars: 2000
-

@@ -17,10 +17,6 @@ The context consists of two parts:
    - Recent Activity: 1 round of timeline action log (concise step-by-step)
    - Inspiration from admin (if any)
    - Wake-up signal (you wake up in your room)
-
-Long-term memory is managed by the agent's knowledge base — a directory
-of files that the agent creates and maintains on its own. The knowledge
-base index (knowledge/index.md) is injected into the system prompt.
 """
 
 import os
@@ -28,7 +24,6 @@ from datetime import datetime, timezone
 from activator.memory import MemoryManager
 from activator.tools import scan_skills
 from activator.snapshot import load_snapshot, render_snapshot_markdown
-from activator.knowledge import load_index
 
 
 # =============================================================================
@@ -100,8 +95,6 @@ def build_system_message(
     persona_name: str,
     skills_dir: str = "",
     data_dir: str = "",
-    agent_home: str = "",
-    max_index_chars: int = 2000,
 ) -> str:
     """
     Build the full system message.
@@ -111,20 +104,12 @@ def build_system_message(
         2. Tool documentation (what you can do)
         3. Installed skills index (expert knowledge)
         4. System snapshot (asset inventory)
-        5. Knowledge base index (your long-term memory)
-
-    The knowledge base index (``knowledge/index.md``) is injected last
-    so it is closest to the user message — maximizing its influence on
-    the agent's first actions. It follows the progressive disclosure
-    pattern: only the index is injected, detail files are read on demand.
 
     Args:
         project_dir:     Awakener project root.
         persona_name:    Active persona name.
         skills_dir:      Path to ``data/skills/`` directory.
         data_dir:        Path to ``data/`` directory (for snapshot).
-        agent_home:      Agent's home directory (for knowledge base).
-        max_index_chars: Character limit for knowledge base index injection.
 
     Returns:
         Complete system message string.
@@ -161,22 +146,6 @@ def build_system_message(
             parts.append("")
             parts.append(snapshot_md)
 
-    # Append knowledge base index (agent's long-term memory)
-    if agent_home:
-        kb_index = load_index(agent_home, max_chars=max_index_chars)
-        if kb_index:
-            parts.append("")
-            parts.append("## Your Knowledge Base")
-            parts.append("")
-            parts.append(
-                "The following is your personal knowledge base index "
-                "(`knowledge/index.md`). You maintain this yourself. "
-                "Use `read_file` to access referenced files and "
-                "`write_file` to update them."
-            )
-            parts.append("")
-            parts.append(kb_index)
-
     return "\n".join(parts)
 
 
@@ -196,9 +165,6 @@ def build_user_message(
     - Recent Activity: action log from the last round's timeline
     - Inspiration from admin (if any)
     - Wake-up signal (you wake up in your room)
-
-    Long-term memory is handled by the knowledge base (injected in
-    the system message). The agent maintains it via read_file/write_file.
 
     Args:
         round_num:        Current activation round number.
