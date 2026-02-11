@@ -140,26 +140,25 @@
   function buildCollapsedSummary(actionLog, summary) {
     if (!summary) return '<p class="text-muted">(no content)</p>';
 
-    var html = '';
     var lines = summary.split('\n');
+    var parts = [];
 
-    // 1. Extract first [Thinking] line
+    // 1. Extract first [Thinking] content (without tag)
+    var firstThoughtContent = '';
     for (var i = 0; i < lines.length; i++) {
       if (lines[i].includes('[Thinking]')) {
         var match = lines[i].match(/\[Thinking\]\s*(.*)/);
         if (match && match[1]) {
-          html += '<div class="timeline-thought">' +
-                  '<strong>[Thinking]</strong> ' +
-                  escapeHtml(match[1].trim()) +
-                  '</div>';
+          firstThoughtContent = match[1].trim();
           break;
         }
       }
     }
+    if (firstThoughtContent) {
+      parts.push(firstThoughtContent);
+    }
 
     // 2. Extract formal output: everything AFTER the last [Thinking] line.
-    //    The final output (structured summary) is always at the end,
-    //    following the last thinking block.
     var lastThinkingIdx = -1;
     for (var j = lines.length - 1; j >= 0; j--) {
       if (/\[Thinking\]/.test(lines[j])) {
@@ -170,17 +169,22 @@
 
     var formalLines = [];
     for (var k = lastThinkingIdx + 1; k < lines.length; k++) {
-      // Skip leading empty lines
       if (lines[k].trim() === '' && formalLines.length === 0) continue;
       formalLines.push(lines[k]);
     }
 
     if (formalLines.length > 0) {
-      var preview = formalLines.slice(0, 20).join('\n');
-      html += '<pre class="timeline-output">' + escapeHtml(preview) + '</pre>';
+      var preview = formalLines.slice(0, 10).join('\n').trim();
+      parts.push(preview);
     }
 
-    return html || '<p class="text-muted">(no content)</p>';
+    // 3. Build unified collapsed view
+    if (parts.length === 0) {
+      return '<p class="text-muted">(no content)</p>';
+    }
+
+    var collapsedText = parts.join('\n\n...\n\n') + '\n...';
+    return '<pre class="timeline-summary-collapsed">' + escapeHtml(collapsedText) + '</pre>';
   }
 
   /**
