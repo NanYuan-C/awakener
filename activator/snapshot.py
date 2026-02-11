@@ -261,6 +261,8 @@ the `activity` block. Rules for quotes:
     - Must be a **verbatim excerpt** from the agent's OWN original output \
 (its [THOUGHT] blocks or final text). NEVER quote user inspirations, \
 system messages, or command outputs — only the agent's own words.
+    - **NEVER translate.** Copy the exact original text as-is, preserving \
+the original language (Chinese, English, or whatever the agent used).
     - If multiple interesting passages exist, pick the single MOST striking one.
     - Can be up to ~5 sentences. Prefer a complete, self-contained passage.
     - What qualifies: philosophical reflection, existential self-awareness, \
