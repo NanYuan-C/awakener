@@ -11,7 +11,7 @@ The snapshot captures:
     - Important documents
     - System environment overview
     - Known issues discovered during the round
-    - Activity feed (recent round activities, sliding window of last 50)
+    - Activity feed (written to data/feed.jsonl, not stored in snapshot)
 
 Workflow:
     1. After each round, the activator calls ``update_snapshot()``
@@ -204,10 +204,6 @@ def render_snapshot_markdown(snapshot: dict) -> str:
             )
         lines.append("")
 
-    # NOTE: recent_activity is stored in the snapshot but NOT injected
-    # into the agent's prompt. It is used for the web feed and future
-    # push notifications / community features.
-
     return "\n".join(lines).strip()
 
 
@@ -355,17 +351,13 @@ _SECTION_KEYS: dict[str, str] = {
 }
 
 
-# Maximum number of recent activity entries to keep in the snapshot.
-_MAX_RECENT_ACTIVITY = 50
-
-
 def _merge_delta(old_snapshot: dict, delta: dict, round_num: int) -> dict:
     """
     Merge an LLM-produced delta into the existing snapshot.
 
-    The delta may contain ``add``, ``update``, and ``remove`` sections,
-    plus an ``activity`` block.  If ``no_changes`` is true, only the
-    meta block and activity are updated.
+    The delta may contain ``add``, ``update``, and ``remove`` sections.
+    If ``no_changes`` is true, only the meta block is updated.
+    The ``activity`` block is handled separately by ``_append_feed()``.
 
     Args:
         old_snapshot: The current snapshot dict (may be empty).
@@ -385,29 +377,9 @@ def _merge_delta(old_snapshot: dict, delta: dict, round_num: int) -> dict:
         datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
     )
 
-    # --- Append activity (always, even if no_changes) ---
-    activity = delta.get("activity")
-    if activity and isinstance(activity, dict):
-        content = activity.get("content", "")
-        tags = activity.get("tags", [])
-        if isinstance(tags, str):
-            tags = [tags]
-        if content:
-            if "recent_activity" not in snapshot:
-                snapshot["recent_activity"] = []
-            snapshot["recent_activity"].append({
-                "round": round_num,
-                "timestamp": datetime.now(timezone.utc).strftime(
-                    "%Y-%m-%dT%H:%M:%SZ"
-                ),
-                "content": content.strip(),
-                "tags": [t.strip() for t in tags if isinstance(t, str)],
-            })
-            # Trim to sliding window
-            if len(snapshot["recent_activity"]) > _MAX_RECENT_ACTIVITY:
-                snapshot["recent_activity"] = (
-                    snapshot["recent_activity"][-_MAX_RECENT_ACTIVITY:]
-                )
+    # NOTE: activity is extracted from the delta and written to feed.jsonl
+    # by _append_feed() in update_snapshot(). It is NOT stored in the
+    # snapshot — the feed is user/community-facing, not agent-facing.
 
     # Short-circuit: nothing else changed
     if delta.get("no_changes"):
