@@ -165,6 +165,13 @@ class AgentManager:
         if self.is_running:
             raise RuntimeError("Agent is already running")
 
+        # Prevent starting a new thread while the old one is still finishing
+        if self._thread and self._thread.is_alive():
+            raise RuntimeError(
+                "Agent is still finishing its current round. "
+                "Please wait a moment and try again."
+            )
+
         self._stop_event.clear()
         self.state = "running"
         self.start_time = datetime.now(timezone.utc).isoformat()

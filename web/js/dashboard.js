@@ -372,11 +372,25 @@
    * @param {string} action - One of: start, stop, restart.
    */
   window.agentAction = async function(action) {
+    // Instant UI feedback for stop/restart — don't wait for server
+    if (action === 'stop' || action === 'restart') {
+      updateStatus({status: 'stopping'});
+      toast('Stopping agent, finishing current round...', 'info');
+    }
+
     try {
       await api.post('/api/agent/' + action);
-      toast('Agent ' + action + ' command sent', 'success');
+      if (action === 'start') {
+        toast('Agent started', 'success');
+      } else if (action === 'stop') {
+        toast('Agent stopped', 'success');
+      } else if (action === 'restart') {
+        toast('Agent restarted', 'success');
+      }
     } catch (err) {
       toast(err.message, 'error');
+      // Re-fetch actual status on error to correct the UI
+      fetchStatus();
     }
   };
 
@@ -389,13 +403,19 @@
     const message = input.value.trim();
     if (!message) return;
 
+    // Instant UI feedback — clear input and disable button immediately
+    input.value = '';
+    if (btnSendInspiration) btnSendInspiration.disabled = true;
+    toast('Sending inspiration...', 'info');
+
     try {
       await api.post('/api/agent/inspiration', { message: message });
       toast('Inspiration sent to agent', 'success');
-      input.value = '';
-      if (btnSendInspiration) btnSendInspiration.disabled = true;
     } catch (err) {
       toast(err.message, 'error');
+      // Restore input on error
+      input.value = message;
+      if (btnSendInspiration) btnSendInspiration.disabled = false;
     }
   };
 
