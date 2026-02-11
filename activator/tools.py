@@ -114,9 +114,9 @@ TOOLS_SCHEMA = [
         },
     },
     # -- notebook_write and notebook_read are temporarily disabled --
-    # The agent now manages its own long-term memory via files in its
-    # home directory, guided by the "醒来提醒.md" wake-up note.
-    # These tools may be re-enabled or removed in a future version.
+    # The agent now manages its own long-term memory via the knowledge
+    # base (knowledge/ directory in its home). These tools may be
+    # re-enabled or removed in a future version.
     #
     # {
     #     "type": "function",

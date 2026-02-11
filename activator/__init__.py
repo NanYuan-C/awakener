@@ -4,12 +4,13 @@ Awakener - Activator Package
 The autonomous agent activation engine.
 
 This package contains the core logic for the agent's activation loop:
-    - loop.py     : Main activation loop entry point
-    - agent.py    : LLM interaction and tool-calling loop (one round)
-    - tools.py    : 5 tools with safety restrictions
-    - memory.py   : Notebook (JSONL) + timeline + inspiration management
-    - context.py  : System/user prompt assembly
-    - snapshot.py : System snapshot (asset inventory) updater
+    - loop.py      : Main activation loop entry point
+    - agent.py     : LLM interaction and tool-calling loop (one round)
+    - tools.py     : 5 tools with safety restrictions
+    - memory.py    : Notebook (JSONL) + timeline + inspiration management
+    - context.py   : System/user prompt assembly
+    - snapshot.py  : System snapshot (asset inventory) updater
+    - knowledge.py : Agent's self-maintained knowledge base
 
 Usage:
     from activator import run_activation_loop

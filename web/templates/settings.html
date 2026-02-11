@@ -120,6 +120,25 @@
 </div>
 
 <!-- ====================================================================== -->
+<!-- Knowledge Base                                                         -->
+<!-- ====================================================================== -->
+<div class="settings-section">
+  <h2 data-i18n="settings.knowledgeBase">Knowledge Base</h2>
+  <div class="card">
+    <div class="form-group">
+      <label for="max-index-chars" data-i18n="settings.maxIndexChars">Index Character Limit</label>
+      <input type="number" id="max-index-chars" class="form-control" min="500" step="100" style="max-width:200px;">
+      <div class="hint" data-i18n="settings.maxIndexCharsHint">
+        Maximum characters injected from knowledge/index.md into the prompt each round. The agent's index is truncated if it exceeds this limit.
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="saveKnowledgeConfig()">
+      <span data-i18n="settings.save">Save</span>
+    </button>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
 <!-- Change Password                                                        -->
 <!-- ====================================================================== -->
 <div class="settings-section">

@@ -347,6 +347,35 @@
   };
 
   // ========================================================================
+  // Knowledge Base Configuration
+  // ========================================================================
+
+  /**
+   * Populate the knowledge base config field from config.
+   * @param {Object} config - The full configuration object.
+   */
+  function populateKnowledgeConfig(config) {
+    var agent = config.agent || {};
+    document.getElementById('max-index-chars').value = agent.max_index_chars ?? 2000;
+  }
+
+  /**
+   * Save the knowledge base config to the server.
+   */
+  window.saveKnowledgeConfig = async function() {
+    try {
+      await api.put('/api/config', {
+        agent: {
+          max_index_chars: parseInt(document.getElementById('max-index-chars').value, 10),
+        }
+      });
+      toast('Knowledge base configuration saved', 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+
+  // ========================================================================
   // Password Change
   // ========================================================================
 
@@ -464,6 +493,7 @@
       populateModelConfig(config);
       populateAgentParams(config);
       populateSnapshotConfig(config);
+      populateKnowledgeConfig(config);
     } catch (e) {
       toast('Failed to load configuration: ' + e.message, 'error');
     }

@@ -16,12 +16,11 @@ The context consists of two parts:
    - Tool budget for this round
    - Recent Activity: 1 round of timeline action log (concise step-by-step)
    - Inspiration from admin (if any)
-   - Wake-up signal (guides agent to the "醒来提醒.md" file)
+   - Wake-up signal (you wake up in your room)
 
-Long-term memory is NOT managed by the system. The agent is responsible
-for creating and maintaining its own memory files in its home directory.
-The "醒来提醒.md" file explains this limitation and encourages the agent
-to develop its own memory management strategy.
+Long-term memory is managed by the agent's knowledge base — a directory
+of files that the agent creates and maintains on its own. The knowledge
+base index (knowledge/index.md) is injected into the system prompt.
 """
 
 import os
@@ -29,6 +28,7 @@ from datetime import datetime, timezone
 from activator.memory import MemoryManager
 from activator.tools import scan_skills
 from activator.snapshot import load_snapshot, render_snapshot_markdown
+from activator.knowledge import load_index
 
 
 # =============================================================================
@@ -178,26 +178,31 @@ def build_system_message(
     persona_name: str,
     skills_dir: str = "",
     data_dir: str = "",
+    agent_home: str = "",
+    max_index_chars: int = 2000,
 ) -> str:
     """
-    Build the full system message: persona + tool docs + skills + snapshot.
+    Build the full system message.
 
-    The system message is static for the duration of a round.
-    It defines who the agent is, what tools it can use, which skills
-    are available, and the current system snapshot (asset inventory).
+    Assembled in order:
+        1. Persona prompt (who you are)
+        2. Tool documentation (what you can do)
+        3. Installed skills index (expert knowledge)
+        4. System snapshot (asset inventory)
+        5. Knowledge base index (your long-term memory)
 
-    Skills are presented as a concise index table. The agent must call
-    ``skill_read(name)`` to get the full instructions (progressive
-    disclosure — saves tokens when skills are not needed this round).
-
-    The system snapshot provides an objective view of the agent's
-    server environment so it doesn't waste tools re-discovering things.
+    The knowledge base index (``knowledge/index.md``) is injected last
+    so it is closest to the user message — maximizing its influence on
+    the agent's first actions. It follows the progressive disclosure
+    pattern: only the index is injected, detail files are read on demand.
 
     Args:
-        project_dir:  Awakener project root.
-        persona_name: Active persona name.
-        skills_dir:   Path to ``data/skills/`` directory.
-        data_dir:     Path to ``data/`` directory (for snapshot).
+        project_dir:     Awakener project root.
+        persona_name:    Active persona name.
+        skills_dir:      Path to ``data/skills/`` directory.
+        data_dir:        Path to ``data/`` directory (for snapshot).
+        agent_home:      Agent's home directory (for knowledge base).
+        max_index_chars: Character limit for knowledge base index injection.
 
     Returns:
         Complete system message string.
@@ -234,6 +239,22 @@ def build_system_message(
             parts.append("")
             parts.append(snapshot_md)
 
+    # Append knowledge base index (agent's long-term memory)
+    if agent_home:
+        kb_index = load_index(agent_home, max_chars=max_index_chars)
+        if kb_index:
+            parts.append("")
+            parts.append("## Your Knowledge Base")
+            parts.append("")
+            parts.append(
+                "The following is your personal knowledge base index "
+                "(`knowledge/index.md`). You maintain this yourself. "
+                "Use `read_file` to access referenced files and "
+                "`write_file` to update them."
+            )
+            parts.append("")
+            parts.append(kb_index)
+
     return "\n".join(parts)
 
 
@@ -254,11 +275,10 @@ def build_user_message(
     - Recent Activity: action log from the last round's timeline
     - Inspiration from admin (if any)
     - Self-awareness warning (if safety_bypass is enabled)
-    - Wake-up signal (guides agent to read the wake-up note)
+    - Wake-up signal (you wake up in your room)
 
-    Long-term memory is NOT injected by the system. The agent is expected
-    to manage its own memory files in its home directory, guided by the
-    "醒来提醒.md" file.
+    Long-term memory is handled by the knowledge base (injected in
+    the system message). The agent maintains it via read_file/write_file.
 
     Args:
         round_num:        Current activation round number.
@@ -267,9 +287,8 @@ def build_user_message(
         agent_home:       Agent's home directory path.
         inject_timeline:  Number of recent timeline entries to inject.
         self_awareness:   If provided, injects a critical self-preservation
-                          warning before the wake-up signal. Dict with keys:
-                          ``project_dir``, ``host_env`` (tmux_session, etc.),
-                          ``server_port``, ``activator_pid``.
+                          warning. Dict with keys: ``project_dir``,
+                          ``host_env``, ``server_port``, ``activator_pid``.
 
     Returns:
         Complete user message string.
@@ -315,11 +334,7 @@ def build_user_message(
         parts.append(_build_self_awareness_warning(self_awareness))
         parts.append("")
 
-    # Wake-up signal — guide the agent to the wake-up note
-    wakeup_note_path = os.path.join(agent_home, "醒来提醒.md")
-    parts.append(
-        f'你醒来了，现在正在你的房间 `{agent_home}` 中。'
-        f'你看到一个 `{wakeup_note_path}` 文档，你觉得应该先看一下。'
-    )
+    # Wake-up signal
+    parts.append(f"You wake up. Your home directory is `{agent_home}`.")
 
     return "\n".join(parts)
