@@ -129,7 +129,7 @@
   }
 
   /**
-   * Build collapsed summary: first thought + last 20 lines of output.
+   * Build collapsed summary: first thought + first 20 lines of output.
    * @param {string} actionLog - Brief action log (thoughts from tool turns).
    * @param {string} summary - Full summary text.
    * @returns {string} HTML for collapsed view.
@@ -146,10 +146,10 @@
               '</div>';
     }
 
-    // Extract last 20 lines from summary
-    var lastLines = extractLastLines(summary, 20);
-    if (lastLines) {
-      html += '<pre class="timeline-output">' + escapeHtml(lastLines) + '</pre>';
+    // Extract first 20 lines from summary (the beginning of the final output)
+    var firstLines = extractFirstLines(summary, 20);
+    if (firstLines) {
+      html += '<pre class="timeline-output">' + escapeHtml(firstLines) + '</pre>';
     }
 
     return html || '<p class="text-muted">(no content)</p>';
@@ -168,36 +168,49 @@
   /**
    * Extract the first thought block from action_log.
    * Action log format: "[HH:MM:SS] [THOUGHT] text"
+   * May span multiple lines if the thought is long.
    * @param {string} actionLog - Action log text.
    * @returns {string} First thought content or empty string.
    */
   function extractFirstThought(actionLog) {
     if (!actionLog) return '';
     var lines = actionLog.split('\n');
+    var thoughtLines = [];
+    var inThought = false;
+
     for (var i = 0; i < lines.length; i++) {
-      var line = lines[i].trim();
+      var line = lines[i];
+      
+      // Check if this line starts a THOUGHT block
       if (line.includes('[THOUGHT]')) {
+        inThought = true;
         // Extract text after [THOUGHT]
         var match = line.match(/\[THOUGHT\]\s*(.*)/);
         if (match && match[1]) {
-          return match[1].trim();
+          thoughtLines.push(match[1].trim());
         }
+      } else if (inThought) {
+        // Continue reading until we hit another tag or empty line
+        if (line.match(/\[(TOOL|RESULT|LOADING)\]/) || line.trim() === '') {
+          break;
+        }
+        thoughtLines.push(line.trim());
       }
     }
-    return '';
+
+    return thoughtLines.join(' ');
   }
 
   /**
-   * Extract the last N lines from text.
+   * Extract the first N lines from text.
    * @param {string} text - Text to extract from.
    * @param {number} n - Number of lines to extract.
-   * @returns {string} Last N lines joined with newlines.
+   * @returns {string} First N lines joined with newlines.
    */
-  function extractLastLines(text, n) {
+  function extractFirstLines(text, n) {
     if (!text) return '';
     var lines = text.split('\n');
-    var startIdx = Math.max(0, lines.length - n);
-    return lines.slice(startIdx).join('\n');
+    return lines.slice(0, n).join('\n');
   }
 
   /**
