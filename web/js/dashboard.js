@@ -80,7 +80,7 @@
    *   - "status"       : { status, next_in?, message? }
    *   - "log"          : { text }
    *   - "loading"      : { text }           (animated dots, auto-removed on next msg)
-   *   - "round"        : { step, event, tools_used?, duration?, notebook_saved? }
+   *   - "round"        : { step, event, tools_used?, duration? }
    *   - "tool_call"    : { name, args }
    *   - "tool_result"  : { text }
    *   - "thought"      : { text }           (non-streaming fallback)
@@ -127,8 +127,7 @@
         } else if (d.event === 'completed') {
           appendLog(
             '[DONE] Round ' + d.step + ' | Tools: ' + (d.tools_used || 0) +
-            ' | Time: ' + (d.duration || '?') + 's | Note: ' +
-            (d.notebook_saved ? 'saved' : 'NOT SAVED'),
+            ' | Time: ' + (d.duration || '?') + 's',
             'system'
           );
         }

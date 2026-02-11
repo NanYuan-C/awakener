@@ -1,16 +1,9 @@
 """
 Awakener - Memory Manager
 ============================
-Manages the agent's dual-layer memory system:
+Manages the agent's memory system:
 
-1. Notebook (data/notebook/<YYYY-MM-DD>.jsonl)
-   - Agent's subjective per-round notes.
-   - Written by the agent via notebook_write tool.
-   - Read by the agent via notebook_read tool.
-   - Last N rounds auto-injected into the prompt each round.
-   - Per-day files for manageable sizes.
-
-2. Timeline (data/timeline/<YYYY-MM-DD>.jsonl)
+1. Timeline (data/timeline/<YYYY-MM-DD>.jsonl)
    - Activator's objective record, one entry per round.
    - Contains round number, timestamp, tool count, duration, summary,
      and a concise action_log (brief thoughts from tool-calling turns).
@@ -18,15 +11,12 @@ Manages the agent's dual-layer memory system:
    - The action_log is injected into the prompt for round continuity.
    - Per-day files for manageable sizes.
 
-3. Inspiration (data/inspiration.txt)
+2. Inspiration (data/inspiration.txt)
    - One-way hints from the admin to the agent.
    - Read and cleared at the start of each round.
-   - Replaces the old "inbox" concept.
 
 File layout (under project data dir):
     data/
-      notebook/
-        2026-02-09.jsonl <- agent's per-round notes (one file per day)
       timeline/
         2026-02-09.jsonl <- activator's round history (one file per day)
       inspiration.txt    <- admin -> agent hints
@@ -34,8 +24,8 @@ File layout (under project data dir):
         2026-02-09.log   <- per-day run log (managed by loop.py)
 
 Backward compatibility:
-    If legacy single-file notebook.jsonl or timeline.jsonl exist in data/,
-    their entries are included when reading (but new writes go to the
+    If legacy single-file timeline.jsonl exists in data/,
+    its entries are included when reading (but new writes go to the
     per-day directory).
 """
 
@@ -50,15 +40,13 @@ class MemoryManager:
     """
     Unified memory interface for the activator.
 
-    All file I/O for notebook, timeline, and inspiration goes through
-    this class. It ensures consistent formatting and error handling.
+    All file I/O for timeline and inspiration goes through this class.
+    It ensures consistent formatting and error handling.
 
     Attributes:
-        data_dir:        Path to the project's data/ directory.
-        notebook_path:   Full path to notebook.jsonl.
-        timeline_path:   Full path to timeline.jsonl.
+        data_dir:         Path to the project's data/ directory.
+        timeline_dir:     Path to the timeline/ directory.
         inspiration_path: Full path to inspiration.txt.
-        _notebook_cache: In-memory cache of notebook entries (loaded once).
     """
 
     def __init__(self, data_dir: str):
@@ -71,19 +59,13 @@ class MemoryManager:
             data_dir: Absolute path to the data/ directory.
         """
         self.data_dir = data_dir
-        self.notebook_dir = os.path.join(data_dir, "notebook")
         self.timeline_dir = os.path.join(data_dir, "timeline")
         self.inspiration_path = os.path.join(data_dir, "inspiration.txt")
 
-        # Legacy single-file paths (for backward compatibility reads)
-        self._legacy_notebook = os.path.join(data_dir, "notebook.jsonl")
+        # Legacy single-file path (for backward compatibility reads)
         self._legacy_timeline = os.path.join(data_dir, "timeline.jsonl")
 
-        os.makedirs(self.notebook_dir, exist_ok=True)
         os.makedirs(self.timeline_dir, exist_ok=True)
-
-        # Cache: loaded on first access and kept in sync
-        self._notebook_cache: list[dict] | None = None
 
     # =========================================================================
     # Helpers: per-day file I/O
@@ -135,119 +117,16 @@ class MemoryManager:
 
         return entries
 
-    # =========================================================================
-    # Notebook Operations
-    # =========================================================================
-
-    def _load_notebook(self) -> list[dict]:
-        """
-        Load all notebook entries from per-day files into memory.
-
-        Each line is a JSON object with keys: round, timestamp, content.
-
-        Returns:
-            List of notebook entry dicts, ordered chronologically.
-        """
-        if self._notebook_cache is not None:
-            return self._notebook_cache
-
-        self._notebook_cache = self._read_all_from_dir(
-            self.notebook_dir, self._legacy_notebook
-        )
-        return self._notebook_cache
-
-    def write_notebook(self, round_num: int, content: str) -> None:
-        """
-        Append a new note for the given round to today's notebook file.
-
-        If a note for this round already exists, it is overwritten
-        (the old entry remains in the file, but the latest one wins
-        when reading).
-
-        Args:
-            round_num: Current activation round number.
-            content:   The agent's note text.
-        """
-        entry = {
-            "round": round_num,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-            "content": content.strip(),
-        }
-
-        # Append to today's file
-        filepath = os.path.join(self.notebook_dir, self._today_filename())
-        try:
-            with open(filepath, "a", encoding="utf-8") as f:
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        except OSError:
-            pass
-
-        # Update cache
-        entries = self._load_notebook()
-        entries.append(entry)
-
-    def read_notebook(self, round_num: int) -> dict | None:
-        """
-        Read the notebook entry for a specific round.
-
-        If multiple entries exist for the same round (due to overwrites),
-        returns the latest one.
-
-        Args:
-            round_num: The round number to look up.
-
-        Returns:
-            The notebook entry dict, or None if not found.
-        """
-        entries = self._load_notebook()
-        # Search from the end to get the latest entry for this round
-        for entry in reversed(entries):
-            if entry.get("round") == round_num:
-                return entry
-        return None
-
-    def get_recent_notes(self, count: int = 3) -> list[dict]:
-        """
-        Get the most recent N notebook entries.
-
-        Used by context.py to inject recent notes into the prompt.
-        Deduplicates by round number (keeps latest entry per round).
-
-        Args:
-            count: Number of recent rounds to return.
-
-        Returns:
-            List of up to `count` notebook entries, oldest first.
-        """
-        entries = self._load_notebook()
-
-        # Deduplicate: keep latest entry per round
-        by_round: dict[int, dict] = {}
-        for entry in entries:
-            r = entry.get("round", 0)
-            by_round[r] = entry
-
-        # Sort by round number and take the last N
-        sorted_entries = sorted(by_round.values(), key=lambda e: e.get("round", 0))
-        return sorted_entries[-count:] if len(sorted_entries) > count else sorted_entries
-
     def get_last_round_number(self) -> int:
         """
-        Get the highest round number recorded in the notebook.
+        Get the highest round number recorded in the timeline.
 
         Used to resume the round counter after a restart.
 
         Returns:
             The last round number, or 0 if no entries exist.
         """
-        entries = self._load_notebook()
-        if not entries:
-            # Also check timeline for round numbers
-            return self._get_last_timeline_round()
-
-        max_round = max(e.get("round", 0) for e in entries)
-        timeline_round = self._get_last_timeline_round()
-        return max(max_round, timeline_round)
+        return self._get_last_timeline_round()
 
     # =========================================================================
     # Timeline Operations
@@ -259,7 +138,6 @@ class MemoryManager:
         tools_used: int,
         duration: float,
         summary: str,
-        notebook_saved: bool = True,
         action_log: str = "",
     ) -> None:
         """
@@ -273,7 +151,6 @@ class MemoryManager:
             duration:       Round duration in seconds.
             summary:        Full summary of the agent's thoughts and outputs
                             (displayed on the timeline web page).
-            notebook_saved: Whether the agent saved a notebook entry.
             action_log:     Concise action log — only the brief thoughts from
                             tool-calling turns (injected into next round's prompt).
         """
@@ -284,7 +161,6 @@ class MemoryManager:
             "duration": round(duration, 1),
             "summary": summary,
             "action_log": action_log,
-            "notebook_saved": notebook_saved,
         }
 
         filepath = os.path.join(self.timeline_dir, self._today_filename())
@@ -442,7 +318,7 @@ class MemoryManager:
 
     def delete_round(self, round_num: int) -> dict:
         """
-        Cascade-delete all data for a given round: timeline, notebook, and logs.
+        Cascade-delete all data for a given round: timeline and logs.
 
         This is the main entry point for the web API delete operation.
         Deleting from the timeline page removes all associated data so
@@ -452,20 +328,15 @@ class MemoryManager:
             round_num: The round number to delete.
 
         Returns:
-            Dict with keys 'timeline', 'notebook', 'logs' indicating
+            Dict with keys 'timeline', 'logs' indicating
             whether each type of data was found and deleted.
         """
         result = {
             "timeline": self._delete_round_from_dir(
                 self.timeline_dir, round_num, self._legacy_timeline
             ),
-            "notebook": self._delete_round_from_dir(
-                self.notebook_dir, round_num, self._legacy_notebook
-            ),
             "logs": self._delete_round_from_logs(round_num),
         }
-        # Invalidate notebook cache
-        self._notebook_cache = None
         return result
 
     def _delete_round_from_logs(self, round_num: int) -> bool:
@@ -545,22 +416,6 @@ class MemoryManager:
     # =========================================================================
     # Bulk Read (for web API)
     # =========================================================================
-
-    def get_all_notebook_entries(self) -> list[dict]:
-        """
-        Get all notebook entries. Used by the web API for the memory page.
-
-        Returns:
-            All notebook entries, deduplicated by round, sorted by round.
-        """
-        entries = self._load_notebook()
-
-        by_round: dict[int, dict] = {}
-        for entry in entries:
-            r = entry.get("round", 0)
-            by_round[r] = entry
-
-        return sorted(by_round.values(), key=lambda e: e.get("round", 0))
 
     def get_all_timeline_entries(self) -> list[dict]:
         """

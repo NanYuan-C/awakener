@@ -11,7 +11,6 @@ Route groups:
     /api/prompt      - Single global prompt management (read / update default.md)
     /api/skills/*    - Skill management (list / get / add / toggle / delete)
     /api/timeline    - Timeline data access (one entry per round)
-    /api/memory/*    - Agent notebook entries (JSONL per-round notes)
     /api/logs        - Activator run logs (per-day files)
 
 All routes except /api/auth/* require a valid JWT token.
@@ -634,7 +633,7 @@ def create_router(
     async def delete_round(round_num: int):
         """
         Cascade-delete all data for a given round.
-        Removes the timeline entry, notebook entry, and log section
+        Removes the timeline entry and log section
         for the specified round number.
         """
         from activator.memory import MemoryManager
@@ -650,44 +649,6 @@ def create_router(
             "message": f"Round {round_num} deleted",
             "deleted": result,
         }
-
-    @router.get("/memory/notebook", dependencies=[auth])
-    async def get_memory_notebook(
-        offset: int = Query(0, ge=0, description="Offset for pagination"),
-        limit: int = Query(50, ge=1, le=500, description="Max entries to return"),
-    ):
-        """
-        Get the agent's notebook entries (per-round notes from notebook.jsonl).
-        Returns entries in reverse order (newest first) with pagination.
-        """
-        from activator.memory import MemoryManager
-
-        data_dir = os.path.join(config_manager.project_dir, "data")
-        memory = MemoryManager(data_dir)
-        entries = memory.get_all_notebook_entries()
-
-        total = len(entries)
-        # Reverse for newest-first display
-        entries.reverse()
-        page = entries[offset : offset + limit]
-
-        return {"entries": page, "total": total}
-
-    @router.get("/memory/recent", dependencies=[auth])
-    async def get_recent_notes(
-        count: int = Query(10, ge=1, le=50, description="Number of recent notes"),
-    ):
-        """
-        Get the most recent notebook entries.
-        Returns notes in chronological order (oldest first within the window).
-        """
-        from activator.memory import MemoryManager
-
-        data_dir = os.path.join(config_manager.project_dir, "data")
-        memory = MemoryManager(data_dir)
-        notes = memory.get_recent_notes(count=count)
-
-        return {"notes": notes}
 
     # =========================================================================
     # LOG ROUTE - Requires authentication

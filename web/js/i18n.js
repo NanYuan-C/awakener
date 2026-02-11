@@ -33,7 +33,6 @@ const messages = {
       skills: "Skills",
       timeline: "Timeline",
       snapshot: "Snapshot",
-      memory: "Memory",
       logout: "Logout",
     },
 
@@ -93,7 +92,7 @@ const messages = {
       inspirationTitle: "What is Inspiration?",
       inspirationDesc1: "Inspiration is <strong>not</strong> a conversation with the agent. The agent cannot reply to you here.",
       inspirationDesc2: "It is a one-way message that the agent will see as a \"spark of inspiration\" at the beginning of its <strong>next activation round</strong>. Use it to gently steer the agent's direction — for example:",
-      inspirationEx1: "\"Try organizing your notes today\"",
+      inspirationEx1: "\"Try organizing your knowledge base today\"",
       inspirationEx2: "\"Explore something creative\"",
       inspirationEx3: "\"Review yesterday's work and reflect\"",
       inspirationDesc3: "The agent will incorporate this inspiration into its own thinking and decide how to act on it autonomously.",
@@ -213,17 +212,6 @@ const messages = {
       emptyHint: "The snapshot will be generated after the first agent round.",
     },
 
-    // -- Memory --
-    memory: {
-      title: "Agent Memory",
-      notebook: "Notebook",
-      refresh: "Refresh",
-      loading: "Loading memory...",
-      no_data: "No memory data yet. The agent hasn't written anything.",
-      lines: "lines",
-      size: "size",
-    },
-
     // -- Common --
     common: {
       loading: "Loading...",
@@ -249,7 +237,6 @@ const messages = {
       skills: "技能",
       timeline: "时间线",
       snapshot: "系统快照",
-      memory: "记忆",
       logout: "退出",
     },
 
@@ -306,7 +293,7 @@ const messages = {
       inspirationTitle: "什么是灵感？",
       inspirationDesc1: "灵感<strong>不是</strong>和 Agent 的对话。Agent 不会在这里回复你。",
       inspirationDesc2: "它是一条单向消息，Agent 会在<strong>下一轮激活</strong>开始时看到它，将其视为一个\u201c灵感火花\u201d。你可以用它来轻轻引导 Agent 的方向，例如：",
-      inspirationEx1: "\u201c今天试着整理一下你的笔记\u201d",
+      inspirationEx1: "\u201c今天试着整理一下你的知识库\u201d",
       inspirationEx2: "\u201c探索一些有创意的东西\u201d",
       inspirationEx3: "\u201c回顾一下昨天的工作并反思\u201d",
       inspirationDesc3: "Agent 会将这个灵感融入自己的思考中，并自主决定如何行动。",
@@ -420,15 +407,6 @@ const messages = {
       emptyHint: "快照将在 Agent 运行第一轮后生成。",
     },
 
-    memory: {
-      title: "Agent 记忆",
-      notebook: "笔记本",
-      refresh: "刷新",
-      loading: "加载记忆中...",
-      no_data: "暂无记忆数据。Agent 还没有写入任何内容。",
-      lines: "行",
-      size: "大小",
-    },
 
     common: {
       loading: "加载中...",

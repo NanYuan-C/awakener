@@ -2,8 +2,7 @@
 Awakener - Agent Core (Single Round)
 =======================================
 Runs one activation round: calls the LLM via LiteLLM, dispatches tool
-calls, enforces the tool budget, and ensures the agent writes a notebook
-entry before the round ends.
+calls, and enforces the tool budget.
 
 The round lifecycle:
     1. Build system + user messages (done by caller)
@@ -22,8 +21,7 @@ Streaming:
 
 Budget enforcement:
     - normal_limit: Max tool calls the agent can use freely
-    - After normal_limit: only notebook_write is allowed
-    - hard_limit (normal + 5): force stop even without notebook
+    - hard_limit (normal + 3): force stop
 
 DeepSeek reasoner support:
     - reasoning_content from the response is preserved in the
@@ -125,7 +123,7 @@ def _repair_json(raw: str) -> dict | None:
     if cmd_match:
         return {"command": cmd_match.group(1).encode().decode('unicode_escape', errors='replace')}
 
-    # For notebook_write: try extracting "content" field
+    # Fallback: try extracting "content" field
     if content_match and not path_match:
         return {
             "content": content_match.group(1).encode().decode('unicode_escape', errors='replace'),
@@ -144,7 +142,6 @@ class RoundResult:
 
     Attributes:
         tools_used:     Total tool calls made this round.
-        notebook_saved: Whether the agent called notebook_write.
         summary:        Full text summary (for timeline page display).
         action_log:     Concise action log — only the brief thoughts from
                         turns that triggered tool calls (for prompt injection).
@@ -154,13 +151,11 @@ class RoundResult:
     def __init__(
         self,
         tools_used: int = 0,
-        notebook_saved: bool = False,
         summary: str = "",
         action_log: str = "",
         error: str | None = None,
     ):
         self.tools_used = tools_used
-        self.notebook_saved = notebook_saved
         self.summary = summary
         self.action_log = action_log
         self.error = error
@@ -211,7 +206,7 @@ def _extract_action_log(messages: list[dict]) -> str:
     Only includes assistant messages that triggered tool calls — the brief
     thoughts the agent had between tool executions.  The final assistant
     message (which has no tool_calls and is typically a long summary) is
-    excluded because the notebook already captures that information.
+    excluded because the summary already captures that information.
 
     This action log is injected into the next round's prompt so the agent
     can see *what it did* without the redundant summary.
@@ -406,7 +401,7 @@ def run_round(
                         thought_done methods).
 
     Returns:
-        RoundResult with tools_used, notebook_saved, summary, and error.
+        RoundResult with tools_used, summary, and error.
     """
     total_tool_calls = 0
     hard_limit = normal_limit + 3  # Small buffer so LLM can gracefully stop
@@ -432,7 +427,6 @@ def run_round(
                 logger.info(f"[ERROR] {error_msg}")
             return RoundResult(
                 tools_used=total_tool_calls,
-                notebook_saved=tool_executor.notebook_written,
                 summary=_extract_summary(messages),
                 action_log=_extract_action_log(messages),
                 error=error_msg,
@@ -447,7 +441,6 @@ def run_round(
                 logger.info(f"[ERROR] {error_msg}")
             return RoundResult(
                 tools_used=total_tool_calls,
-                notebook_saved=tool_executor.notebook_written,
                 summary=_extract_summary(messages),
                 action_log=_extract_action_log(messages),
                 error=error_msg,
@@ -569,7 +562,6 @@ def run_round(
 
     return RoundResult(
         tools_used=total_tool_calls,
-        notebook_saved=tool_executor.notebook_written,
         summary=_extract_summary(messages),
         action_log=_extract_action_log(messages),
     )

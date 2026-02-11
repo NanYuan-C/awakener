@@ -81,14 +81,9 @@
       var tools = event.tools_used || 0;
       var duration = event.duration ? event.duration.toFixed(1) + 's' : '?';
       var summary = event.summary || '';
-      var noteSaved = event.notebook_saved !== false;
-
       var statsHtml =
         '<span class="badge badge-primary">Round ' + round + '</span> ' +
         '<span class="badge badge-info">Tools: ' + tools + '</span> ' +
-        '<span class="badge badge-' + (noteSaved ? 'success' : 'danger') + '">' +
-          (noteSaved ? 'Note saved' : 'No note') +
-        '</span> ' +
         '<span class="text-xs text-muted">' + duration + '</span>';
 
       // Build summary HTML: show first 3 lines, expandable
@@ -233,7 +228,7 @@
    * @param {number} round - The round number to delete.
    */
   window.deleteTimelineEntry = async function(round) {
-    if (!confirm('Delete Round ' + round + '?\nThis will also remove the notebook entry and log for this round.')) return;
+    if (!confirm('Delete Round ' + round + '?\nThis will also remove the log for this round.')) return;
 
     try {
       await api.delete('/api/timeline/' + round);

@@ -187,11 +187,4 @@ def create_app(project_dir: str | None = None) -> FastAPI:
             "snapshot.html", {"request": request, "page_id": "snapshot"}
         )
 
-    @app.get("/memory")
-    async def memory_page(request: Request):
-        """Memory view - agent notebook content."""
-        return templates.TemplateResponse(
-            "memory.html", {"request": request, "page_id": "memory"}
-        )
-
     return app

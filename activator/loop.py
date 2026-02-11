@@ -142,7 +142,7 @@ class ActivatorLogger:
         self._broadcast("status", {"status": "running", "round": round_num})
         self._broadcast("round", {"step": round_num, "event": "started"})
 
-    def round_end(self, round_num: int, tools_used: int, duration: float, notebook_saved: bool) -> None:
+    def round_end(self, round_num: int, tools_used: int, duration: float) -> None:
         """
         Log the end of a round.
 
@@ -150,14 +150,11 @@ class ActivatorLogger:
             round_num:      Completed round number.
             tools_used:     Number of tool calls made.
             duration:       Round duration in seconds.
-            notebook_saved: Whether the agent saved a notebook entry.
         """
         ts = self._timestamp()
-        note_status = "saved" if notebook_saved else "NOT SAVED"
         text = (
             f"[{ts}] [DONE] Round {round_num} complete | "
-            f"Tools: {tools_used} | Time: {duration:.1f}s | "
-            f"Notebook: {note_status}"
+            f"Tools: {tools_used} | Time: {duration:.1f}s"
         )
         self._write(text)
         print(text, flush=True)
@@ -166,7 +163,6 @@ class ActivatorLogger:
             "event": "completed",
             "tools_used": tools_used,
             "duration": round(duration, 1),
-            "notebook_saved": notebook_saved,
         })
 
     def info(self, text: str) -> None:
@@ -413,8 +409,6 @@ def run_activation_loop(
             activator_pid=activator_pid,
             timeout=shell_timeout,
             max_output=max_output,
-            memory_manager=memory,
-            current_round=round_num,
             host_env=host_env,
             skills_dir=skills_dir,
         )
@@ -439,7 +433,6 @@ def run_activation_loop(
             "duration": round(duration, 1),
             "summary": result.summary,
             "action_log": result.action_log,
-            "notebook_saved": result.notebook_saved,
         }
         memory.append_timeline(
             round_num=round_num,
@@ -447,11 +440,10 @@ def run_activation_loop(
             duration=duration,
             summary=result.summary,
             action_log=result.action_log,
-            notebook_saved=result.notebook_saved,
         )
 
         # Log round end
-        logger.round_end(round_num, result.tools_used, duration, result.notebook_saved)
+        logger.round_end(round_num, result.tools_used, duration)
 
         if state_callback:
             state_callback({

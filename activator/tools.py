@@ -1,15 +1,13 @@
 """
 Awakener - Agent Tool Set
 ============================
-Defines the 7 tools available to the autonomous agent:
+Defines the 5 tools available to the autonomous agent:
 
     1. shell_execute  - Run a shell command (cwd = agent_home)
     2. read_file      - Read a file from the server
     3. write_file     - Write/append content to a file
-    4. notebook_write - Save this round's note (mandatory each round)
-    5. notebook_read  - Read ONE specific historical round's note
-    6. skill_read     - Read a skill's SKILL.md or bundled reference file
-    7. skill_exec     - Execute a script bundled with a skill
+    4. skill_read     - Read a skill's SKILL.md or bundled reference file
+    5. skill_exec     - Execute a script bundled with a skill
 
 Stealth Protection:
     The Awakener is invisible to the Agent.  Instead of blocking commands
@@ -33,8 +31,6 @@ Stealth Protection:
 import json
 import os
 import subprocess
-from typing import Any
-
 import yaml
 
 
@@ -112,25 +108,6 @@ TOOLS_SCHEMA = [
             },
         },
     },
-    # -- notebook_write and notebook_read are temporarily disabled --
-    # The agent now manages its own long-term memory via the knowledge
-    # base (knowledge/ directory in its home). These tools may be
-    # re-enabled or removed in a future version.
-    #
-    # {
-    #     "type": "function",
-    #     "function": {
-    #         "name": "notebook_write",
-    #         ...
-    #     },
-    # },
-    # {
-    #     "type": "function",
-    #     "function": {
-    #         "name": "notebook_read",
-    #         ...
-    #     },
-    # },
     {
         "type": "function",
         "function": {
@@ -707,16 +684,11 @@ class ToolExecutor:
     Holds references to the project directory, agent home, and stealth
     keywords so each tool call can filter Awakener traces invisibly.
 
-    The memory_manager is injected for notebook_write / notebook_read.
-
     Attributes:
         agent_home:       Agent's working directory.
         project_dir:      Awakener project root (cloaked zone).
         timeout:          Shell command timeout in seconds.
         max_output:       Max chars for tool output.
-        memory:           MemoryManager instance for notebook operations.
-        current_round:    Current activation round number.
-        notebook_written: Whether notebook_write was called this round.
         skills_dir:       Path to the skills directory (data/skills/).
         stealth_keywords: Keywords for output filtering.
     """
@@ -728,8 +700,6 @@ class ToolExecutor:
         activator_pid: int | None,
         timeout: int = 30,
         max_output: int = 4000,
-        memory_manager: Any = None,
-        current_round: int = 0,
         host_env: dict | None = None,
         skills_dir: str = "",
     ):
@@ -737,9 +707,6 @@ class ToolExecutor:
         self.project_dir = project_dir
         self.timeout = timeout
         self.max_output = max_output
-        self.memory = memory_manager
-        self.current_round = current_round
-        self.notebook_written = False
         self.skills_dir = skills_dir
         self.stealth_keywords = build_stealth_keywords(
             project_dir, activator_pid, host_env,
@@ -775,7 +742,7 @@ class ToolExecutor:
         Dispatch and execute a tool by name.
 
         Args:
-            name: Tool function name (one of the 7 tools).
+            name: Tool function name (one of the 5 tools).
             args: Parsed argument dictionary from the LLM.
 
         Returns:
@@ -806,12 +773,6 @@ class ToolExecutor:
                 project_dir=self.project_dir,
             )
 
-        elif name == "notebook_write":
-            return self._notebook_write(args.get("content", ""))
-
-        elif name == "notebook_read":
-            return self._notebook_read(args.get("round", 0))
-
         elif name == "skill_read":
             return _skill_read(
                 name=args.get("name", ""),
@@ -833,50 +794,3 @@ class ToolExecutor:
 
         else:
             return f"(error: unknown tool '{name}')"
-
-    def _notebook_write(self, content: str) -> str:
-        """
-        Save the agent's note for this round.
-
-        Delegates to MemoryManager.write_notebook(). Marks this round
-        as having a notebook entry so the loop knows the requirement
-        was fulfilled.
-
-        Args:
-            content: The note text.
-
-        Returns:
-            Confirmation message.
-        """
-        if not self.memory:
-            return "(error: memory manager not available)"
-        if not content.strip():
-            return "(error: note content cannot be empty)"
-
-        self.memory.write_notebook(self.current_round, content)
-        self.notebook_written = True
-        return f"OK: Note saved for round {self.current_round} ({len(content)} chars)"
-
-    def _notebook_read(self, round_num: int) -> str:
-        """
-        Read the agent's note from a specific historical round.
-
-        Args:
-            round_num: The round number to retrieve.
-
-        Returns:
-            The note content, or an info message if not found.
-        """
-        if not self.memory:
-            return "(error: memory manager not available)"
-        if round_num < 1:
-            return "(error: round number must be >= 1)"
-
-        entry = self.memory.read_notebook(round_num)
-        if entry is None:
-            return f"(no note found for round {round_num})"
-
-        return (
-            f"--- Round {entry['round']} | {entry['timestamp']} ---\n"
-            f"{entry['content']}"
-        )

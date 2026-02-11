@@ -24,7 +24,7 @@ web:
 agent:
 
   # Working directory on the server where the agent stores its files
-  # (memory, logs, notebooks, etc.)
+  # (timeline, logs, etc.)
   home: "/home/agent"
 
   # LLM model identifier in LiteLLM format: "provider/model-name"
