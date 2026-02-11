@@ -53,15 +53,11 @@
 </div>
 
 <!-- ====================================================================== -->
-<!-- Pagination                                                             -->
+<!-- Load More Button                                                       -->
 <!-- ====================================================================== -->
-<div class="flex flex-center flex-between mt-lg" id="pagination" style="display:none;">
-  <button class="btn btn-sm btn-outline" id="btn-newer" onclick="loadPage('newer')" disabled>
-    &larr; <span data-i18n="timeline.newer">Newer</span>
-  </button>
-  <span class="text-sm text-muted" id="page-info"></span>
-  <button class="btn btn-sm btn-outline" id="btn-older" onclick="loadPage('older')">
-    <span data-i18n="timeline.older">Older</span> &rarr;
+<div class="flex flex-center mt-lg" id="load-more-wrap" style="display:none;">
+  <button class="btn btn-outline" id="load-more-btn">
+    <span data-i18n="timeline.loadMore">Load More</span>
   </button>
 </div>
 {% endblock %}

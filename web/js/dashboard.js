@@ -256,10 +256,6 @@
     // Update round timing and tool count (from status API on page load/refresh)
     if (data.round_start_time) {
       roundStartTime = data.round_start_time;
-      if (!uptimeTimer && (status === 'running' || status === 'waiting')) {
-        uptimeTimer = setInterval(updateUptime, 1000);
-      }
-      updateUptime();
     }
     if (data.round_tools_used !== undefined) {
       roundToolsUsed = data.round_tools_used;
@@ -275,8 +271,20 @@
     // Stop button: disabled when idle, error, or already stopping
     btnStop.disabled = !isRunning;
 
-    // Uptime timer: stop when idle/error/stopped
-    if (status === 'idle' || status === 'error') {
+    // Uptime timer: only run during 'running' status, pause during 'waiting'
+    if (status === 'running') {
+      if (!uptimeTimer) {
+        uptimeTimer = setInterval(updateUptime, 1000);
+      }
+      updateUptime();
+    } else if (status === 'waiting') {
+      // Stop timer but keep the displayed time frozen
+      if (uptimeTimer) {
+        clearInterval(uptimeTimer);
+        uptimeTimer = null;
+      }
+    } else if (status === 'idle' || status === 'error' || status === 'stopping') {
+      // Reset everything
       roundStartTime = null;
       roundToolsUsed = 0;
       if (uptimeTimer) {

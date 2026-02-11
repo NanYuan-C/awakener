@@ -1286,6 +1286,34 @@ select.form-control {
   text-decoration: underline;
 }
 
+.timeline-summary-collapsed {
+  margin-top: var(--spacing-xs);
+}
+
+.timeline-summary-full {
+  margin-top: var(--spacing-xs);
+}
+
+.timeline-thought {
+  background: var(--color-bg);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--color-warning);
+  margin-bottom: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+}
+
+.timeline-output {
+  background: var(--color-bg);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
 
 /* ==========================================================================
    12. Utility Classes

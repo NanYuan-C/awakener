@@ -2,12 +2,12 @@
  * Awakener - Timeline Page Logic
  * =================================
  * Handles:
- *   - Loading timeline entries from /api/timeline
- *   - Rendering per-round summaries as timeline items
- *   - Pagination (newer / older)
- *   - Auto-refresh on interval
+ *   - Lazy-loading timeline entries (initial 5, load 5 more each time)
+ *   - Rendering per-round summaries with collapsible content
+ *   - Collapsed: First thought + last 20 lines of output
+ *   - Expanded: Full summary
  *
- * Timeline entries contain: round, timestamp, tools_used, duration, summary.
+ * Timeline entries contain: round, timestamp, tools_used, duration, summary, action_log.
  * Each entry represents one completed activation round.
  *
  * Depends on: api.js (global `api` object), i18n.js (global `i18n` object)
@@ -17,35 +17,49 @@
   'use strict';
 
   // -- State ----------------------------------------------------------------
-  let currentPage   = 0;
-  let pageSize      = 50;
-  let totalEvents   = 0;
+  let allEvents     = [];      // All loaded events so far
+  let totalEvents   = 0;       // Total events in DB
+  let loadedCount   = 0;       // How many events we've fetched
+  const LOAD_SIZE   = 5;       // Load 5 at a time
 
   // -- DOM references -------------------------------------------------------
-  const timelineEl   = document.getElementById('timeline');
-  const paginationEl = document.getElementById('pagination');
-  const pageInfoEl   = document.getElementById('page-info');
-  const btnNewer     = document.getElementById('btn-newer');
-  const btnOlder     = document.getElementById('btn-older');
+  const timelineEl    = document.getElementById('timeline');
+  const loadMoreBtn   = document.getElementById('load-more-btn');
+  const loadMoreWrap  = document.getElementById('load-more-wrap');
 
   // ========================================================================
-  // Load timeline data
+  // Load timeline data (lazy loading)
   // ========================================================================
 
   /**
-   * Fetch timeline events from the API and render them.
+   * Initial load: fetch first 5 events.
    */
   window.loadTimeline = async function() {
+    allEvents = [];
+    loadedCount = 0;
+    timelineEl.innerHTML = '';
+    await loadMore();
+  };
+
+  /**
+   * Load next batch of events (5 more).
+   */
+  async function loadMore() {
     try {
       var params = new URLSearchParams({
-        offset: currentPage * pageSize,
-        limit: pageSize,
+        offset: loadedCount,
+        limit: LOAD_SIZE,
       });
 
       const data = await api.get('/api/timeline?' + params.toString());
       totalEvents = data.total || 0;
-      renderTimeline(data.events || []);
-      updatePagination();
+      const newEvents = data.events || [];
+
+      allEvents = allEvents.concat(newEvents);
+      loadedCount += newEvents.length;
+
+      renderNewEvents(newEvents);
+      updateLoadMoreButton();
     } catch (e) {
       timelineEl.innerHTML =
         '<div class="empty-state">' +
@@ -53,14 +67,14 @@
         '<p>Failed to load timeline: ' + escapeHtml(e.message) + '</p>' +
         '</div>';
     }
-  };
+  }
 
   /**
-   * Render timeline entries (one per round) into the DOM.
+   * Render newly loaded events (append to timeline).
    * @param {Array} events - Array of timeline entry objects.
    */
-  function renderTimeline(events) {
-    if (events.length === 0) {
+  function renderNewEvents(events) {
+    if (allEvents.length === 0 && events.length === 0) {
       timelineEl.innerHTML =
         '<div class="empty-state">' +
         '<div class="empty-state-icon">&#x1F4C5;</div>' +
@@ -68,8 +82,6 @@
         '</div>';
       return;
     }
-
-    timelineEl.innerHTML = '';
 
     events.forEach(function(event) {
       var item = document.createElement('div');
@@ -81,31 +93,18 @@
       var tools = event.tools_used || 0;
       var duration = event.duration ? event.duration.toFixed(1) + 's' : '?';
       var summary = event.summary || '';
+      var actionLog = event.action_log || '';
+
       var statsHtml =
         '<span class="badge badge-primary">Round ' + round + '</span> ' +
         '<span class="badge badge-info">Tools: ' + tools + '</span> ' +
         '<span class="text-xs text-muted">' + duration + '</span>';
 
-      // Build summary HTML: show first 3 lines, expandable
-      var summaryHtml = '';
-      if (summary) {
-        var lines = summary.split('\n').filter(function(l) { return l.trim(); });
-        if (lines.length <= 3) {
-          summaryHtml = '<pre class="timeline-summary">' + escapeHtml(summary) + '</pre>';
-        } else {
-          var previewText = lines.slice(0, 3).join('\n');
-          var fullText = summary;
-          var itemId = 'tl-summary-' + round;
-          summaryHtml =
-            '<pre class="timeline-summary" id="' + itemId + '">' + escapeHtml(previewText) + '</pre>' +
-            '<pre class="timeline-summary timeline-summary-full" id="' + itemId + '-full" style="display:none">' + escapeHtml(fullText) + '</pre>' +
-            '<a href="javascript:void(0)" class="timeline-toggle" onclick="toggleSummary(\'' + itemId + '\')">' +
-              '<span data-i18n="timeline.showMore">Show all ' + lines.length + ' lines</span>' +
-            '</a>';
-        }
-      } else {
-        summaryHtml = '<p class="text-muted">(no summary)</p>';
-      }
+      // Build collapsed and full content
+      var collapsedHtml = buildCollapsedSummary(actionLog, summary);
+      var fullHtml = buildFullSummary(summary);
+
+      var itemId = 'tl-' + round;
 
       item.innerHTML =
         '<div class="' + dotClass + '"></div>' +
@@ -116,10 +115,136 @@
               '&#x1F5D1;' +
             '</button>' +
           '</div>' +
-          '<div class="timeline-body">' + summaryHtml + '</div>' +
+          '<div class="timeline-body">' +
+            '<div id="' + itemId + '-collapsed" class="timeline-summary-collapsed">' + collapsedHtml + '</div>' +
+            '<div id="' + itemId + '-full" class="timeline-summary-full" style="display:none">' + fullHtml + '</div>' +
+            '<a href="javascript:void(0)" class="timeline-toggle" onclick="toggleSummary(\'' + itemId + '\')">' +
+              '<span data-i18n="timeline.showMore">Expand</span>' +
+            '</a>' +
+          '</div>' +
         '</div>';
 
       timelineEl.appendChild(item);
+    });
+  }
+
+  /**
+   * Build collapsed summary: first thought + last 20 lines of output.
+   * @param {string} actionLog - Brief action log (thoughts from tool turns).
+   * @param {string} summary - Full summary text.
+   * @returns {string} HTML for collapsed view.
+   */
+  function buildCollapsedSummary(actionLog, summary) {
+    var html = '';
+
+    // Extract first thought from action_log
+    var firstThought = extractFirstThought(actionLog);
+    if (firstThought) {
+      html += '<div class="timeline-thought">' +
+              '<strong>[First Thought]</strong><br>' +
+              escapeHtml(firstThought) +
+              '</div>';
+    }
+
+    // Extract last 20 lines from summary
+    var lastLines = extractLastLines(summary, 20);
+    if (lastLines) {
+      html += '<pre class="timeline-output">' + escapeHtml(lastLines) + '</pre>';
+    }
+
+    return html || '<p class="text-muted">(no content)</p>';
+  }
+
+  /**
+   * Build full summary: entire summary text.
+   * @param {string} summary - Full summary text.
+   * @returns {string} HTML for expanded view.
+   */
+  function buildFullSummary(summary) {
+    if (!summary) return '<p class="text-muted">(no summary)</p>';
+    return '<pre class="timeline-summary">' + escapeHtml(summary) + '</pre>';
+  }
+
+  /**
+   * Extract the first thought block from action_log.
+   * Action log format: "[HH:MM:SS] [THOUGHT] text"
+   * @param {string} actionLog - Action log text.
+   * @returns {string} First thought content or empty string.
+   */
+  function extractFirstThought(actionLog) {
+    if (!actionLog) return '';
+    var lines = actionLog.split('\n');
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (line.includes('[THOUGHT]')) {
+        // Extract text after [THOUGHT]
+        var match = line.match(/\[THOUGHT\]\s*(.*)/);
+        if (match && match[1]) {
+          return match[1].trim();
+        }
+      }
+    }
+    return '';
+  }
+
+  /**
+   * Extract the last N lines from text.
+   * @param {string} text - Text to extract from.
+   * @param {number} n - Number of lines to extract.
+   * @returns {string} Last N lines joined with newlines.
+   */
+  function extractLastLines(text, n) {
+    if (!text) return '';
+    var lines = text.split('\n');
+    var startIdx = Math.max(0, lines.length - n);
+    return lines.slice(startIdx).join('\n');
+  }
+
+  /**
+   * Toggle between collapsed and expanded view.
+   * @param {string} id - The item ID prefix (e.g. 'tl-42').
+   */
+  window.toggleSummary = function(id) {
+    var collapsed = document.getElementById(id + '-collapsed');
+    var full = document.getElementById(id + '-full');
+    var link = collapsed ? collapsed.parentElement.querySelector('.timeline-toggle') : null;
+    if (!collapsed || !full) return;
+
+    if (full.style.display === 'none') {
+      // Expand
+      collapsed.style.display = 'none';
+      full.style.display = '';
+      if (link) link.innerHTML = '<span data-i18n="timeline.showLess">Collapse</span>';
+    } else {
+      // Collapse
+      collapsed.style.display = '';
+      full.style.display = 'none';
+      if (link) link.innerHTML = '<span data-i18n="timeline.showMore">Expand</span>';
+    }
+  };
+
+  /**
+   * Update "Load More" button visibility and state.
+   */
+  function updateLoadMoreButton() {
+    if (!loadMoreWrap || !loadMoreBtn) return;
+
+    if (loadedCount >= totalEvents) {
+      // All loaded
+      loadMoreWrap.style.display = 'none';
+    } else {
+      loadMoreWrap.style.display = '';
+      var remaining = totalEvents - loadedCount;
+      loadMoreBtn.textContent = 'Load More (' + remaining + ' remaining)';
+    }
+  }
+
+  /**
+   * Attach load more button click handler.
+   */
+  if (loadMoreBtn) {
+    loadMoreBtn.addEventListener('click', function() {
+      loadMore();
     });
   }
 
@@ -134,41 +259,28 @@
   window.setFilter = function(filter) {
     // All entries are round summaries, so filtering is not needed.
     // Just reload.
-    currentPage = 0;
     loadTimeline();
   };
 
   // ========================================================================
-  // Pagination
+  // Delete
   // ========================================================================
-
-  function updatePagination() {
-    var totalPages = Math.ceil(totalEvents / pageSize);
-    if (totalPages <= 1) {
-      paginationEl.style.display = 'none';
-      return;
-    }
-
-    paginationEl.style.display = '';
-    pageInfoEl.textContent = 'Page ' + (currentPage + 1) + ' of ' + totalPages +
-                             ' (' + totalEvents + ' events)';
-    btnNewer.disabled = currentPage === 0;
-    btnOlder.disabled = currentPage >= totalPages - 1;
-  }
 
   /**
-   * Navigate to a newer or older page.
-   * @param {string} direction - 'newer' or 'older'.
+   * Delete a timeline entry by round number.
+   * @param {number} round - The round number to delete.
    */
-  window.loadPage = function(direction) {
-    if (direction === 'newer' && currentPage > 0) {
-      currentPage--;
-    } else if (direction === 'older') {
-      currentPage++;
-    }
-    loadTimeline();
-  };
+  window.deleteTimelineEntry = async function(round) {
+    if (!confirm('Delete Round ' + round + '?\nThis will also remove the log for this round.')) return;
 
+    try {
+      await api.delete('/api/timeline/' + round);
+      toast('Round ' + round + ' deleted', 'success');
+      loadTimeline();
+    } catch (e) {
+      toast('Failed to delete: ' + e.message, 'error');
+    }
+  };
 
   // ========================================================================
   // Utility
@@ -188,56 +300,6 @@
       return String(ts);
     }
   }
-
-  /**
-   * Map event type to badge CSS class.
-   * @param {string} type - The event type.
-   * @returns {string} Badge class suffix.
-   */
-  function typeBadgeClass(type) {
-    if (type === 'round' || type === 'round_start') return 'primary';
-    if (type === 'tool' || type === 'tool_call')    return 'info';
-    if (type === 'thought')                          return 'warning';
-    if (type === 'error')                            return 'danger';
-    return 'primary';
-  }
-
-  /**
-   * Toggle between 3-line preview and full summary.
-   * @param {string} id - The preview element ID.
-   */
-  window.toggleSummary = function(id) {
-    var preview = document.getElementById(id);
-    var full = document.getElementById(id + '-full');
-    var link = preview ? preview.parentElement.querySelector('.timeline-toggle') : null;
-    if (!preview || !full) return;
-
-    if (full.style.display === 'none') {
-      preview.style.display = 'none';
-      full.style.display = '';
-      if (link) link.innerHTML = '<span data-i18n="timeline.showLess">Collapse</span>';
-    } else {
-      preview.style.display = '';
-      full.style.display = 'none';
-      if (link) link.innerHTML = '<span data-i18n="timeline.showMore">Show more</span>';
-    }
-  };
-
-  /**
-   * Delete a timeline entry by round number.
-   * @param {number} round - The round number to delete.
-   */
-  window.deleteTimelineEntry = async function(round) {
-    if (!confirm('Delete Round ' + round + '?\nThis will also remove the log for this round.')) return;
-
-    try {
-      await api.delete('/api/timeline/' + round);
-      toast('Round ' + round + ' deleted', 'success');
-      loadTimeline();
-    } catch (e) {
-      toast('Failed to delete: ' + e.message, 'error');
-    }
-  };
 
   function escapeHtml(str) {
     var div = document.createElement('div');
