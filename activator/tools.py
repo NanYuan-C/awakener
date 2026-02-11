@@ -1,13 +1,14 @@
 """
 Awakener - Agent Tool Set
 ============================
-Defines the 5 tools available to the autonomous agent:
+Defines the 6 tools available to the autonomous agent:
 
     1. shell_execute  - Run a shell command (cwd = agent_home)
     2. read_file      - Read a file from the server
     3. write_file     - Write/append content to a file
-    4. skill_read     - Read a skill's SKILL.md or bundled reference file
-    5. skill_exec     - Execute a script bundled with a skill
+    4. edit_file      - Edit a file by find-and-replace (insert/replace/delete)
+    5. skill_read     - Read a skill's SKILL.md or bundled reference file
+    6. skill_exec     - Execute a script bundled with a skill
 
 Stealth Protection:
     The Awakener is invisible to the Agent.  Instead of blocking commands
@@ -105,6 +106,43 @@ TOOLS_SCHEMA = [
                     },
                 },
                 "required": ["path", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "edit_file",
+            "description": (
+                "Edit an existing file by searching for an exact text match and "
+                "replacing it with new text. Use for inserting, replacing, or "
+                "deleting content without rewriting the whole file. "
+                "The old_str must match EXACTLY one location in the file."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Absolute path to the file to edit",
+                    },
+                    "old_str": {
+                        "type": "string",
+                        "description": (
+                            "The exact text to find in the file. "
+                            "Must match exactly one location (include "
+                            "surrounding lines for uniqueness)."
+                        ),
+                    },
+                    "new_str": {
+                        "type": "string",
+                        "description": (
+                            "The replacement text. "
+                            "Use empty string to delete the matched text."
+                        ),
+                    },
+                },
+                "required": ["path", "old_str", "new_str"],
             },
         },
     },
@@ -406,6 +444,86 @@ def _write_file(
 
         action = "appended" if append else "wrote"
         return f"OK: {action} {len(content)} chars to {path}"
+    except Exception as e:
+        return f"(error: {type(e).__name__}: {e})"
+
+
+def _edit_file(
+    path: str,
+    old_str: str,
+    new_str: str,
+    project_dir: str,
+) -> str:
+    """
+    Edit a file by replacing an exact text match with new content.
+
+    This is the primary tool for surgical file edits — insert, replace,
+    or delete content without rewriting the entire file.
+
+    * **Replace**: ``old_str`` → ``new_str``
+    * **Insert**:  ``old_str`` is the anchor text; ``new_str`` includes
+      the anchor *plus* the new content before/after it.
+    * **Delete**:  ``new_str`` is an empty string.
+
+    The ``old_str`` must match exactly **one** location in the file.
+    If zero or multiple matches are found, an error is returned so the
+    Agent can refine its search string.
+
+    Args:
+        path:        Absolute path to the file.
+        old_str:     Exact text to find (must be unique in the file).
+        new_str:     Replacement text (may be empty for deletion).
+        project_dir: Awakener project root (for stealth cloaking).
+
+    Returns:
+        Success message or descriptive error.
+    """
+    if is_cloaked_path(path, project_dir):
+        return CLOAKED_WRITE_RESPONSE.format(path=path)
+
+    if not old_str:
+        return "(error: old_str must not be empty — use write_file to create new files)"
+
+    try:
+        if not os.path.isfile(path):
+            return f"(error: file not found: {path})"
+
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        count = content.count(old_str)
+
+        if count == 0:
+            return (
+                "(error: old_str not found in file. "
+                "Make sure it matches the file content exactly, "
+                "including whitespace and indentation.)"
+            )
+
+        if count > 1:
+            return (
+                f"(error: old_str matches {count} locations. "
+                "Include more surrounding context to make it unique.)"
+            )
+
+        new_content = content.replace(old_str, new_str, 1)
+
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+
+        # Build informative success message
+        old_lines = old_str.count("\n") + 1
+        new_lines = new_str.count("\n") + 1 if new_str else 0
+
+        if not new_str:
+            action = f"deleted {old_lines} line(s)"
+        elif old_lines == new_lines:
+            action = f"replaced {old_lines} line(s)"
+        else:
+            action = f"replaced {old_lines} line(s) with {new_lines} line(s)"
+
+        return f"OK: {action} in {path}"
+
     except Exception as e:
         return f"(error: {type(e).__name__}: {e})"
 
@@ -770,6 +888,14 @@ class ToolExecutor:
                 path=self._resolve_path(args.get("path", "")),
                 content=args.get("content", ""),
                 append=args.get("append", False),
+                project_dir=self.project_dir,
+            )
+
+        elif name == "edit_file":
+            return _edit_file(
+                path=self._resolve_path(args.get("path", "")),
+                old_str=args.get("old_str", ""),
+                new_str=args.get("new_str", ""),
                 project_dir=self.project_dir,
             )
 

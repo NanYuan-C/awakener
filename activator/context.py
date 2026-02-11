@@ -35,7 +35,7 @@ TOOL_DOCS = """
 
 ## Available Tools
 
-You have 5 tools at your disposal:
+You have 6 tools at your disposal:
 
 ### 1. shell_execute(command)
 Execute a shell command on this server. Your working directory is your home folder.
@@ -46,21 +46,34 @@ Read the contents of a file. Provide the absolute path.
 
 ### 3. write_file(path, content, append?)
 Write content to a file. Set append=true to append instead of overwriting.
-Parent directories are created automatically.
+Parent directories are created automatically. Best for creating new files or
+full rewrites.
 
-### 4. skill_read(name, file?)
+### 4. edit_file(path, old_str, new_str)
+Edit an existing file by finding an exact text match and replacing it.
+This is your primary tool for modifying files — much more efficient than
+rewriting the entire file. Usage patterns:
+- **Replace**: old_str is found and replaced with new_str.
+- **Insert**: old_str is the anchor text; new_str contains the anchor plus
+  the new content before or after it.
+- **Delete**: set new_str to an empty string.
+old_str must match exactly one location. Include enough surrounding context
+(a few lines) to ensure uniqueness.
+
+### 5. skill_read(name, file?)
 Read a skill's instruction file or bundled reference document. Your installed
 skills are listed below. Call `skill_read("skill-name")` to get the full
 SKILL.md instructions. Use the optional `file` parameter to read reference
 files, e.g. `skill_read("db-optimizer", "references/mysql-tuning.md")`.
 
-### 5. skill_exec(name, script, args?)
+### 6. skill_exec(name, script, args?)
 Execute a script bundled with a skill. The script must be inside the skill's
 `scripts/` directory. Pass optional arguments as a string.
 
 ## Important Rules
 
 - Plan your work wisely. You have a limited tool budget per round.
+- Prefer edit_file over write_file when modifying existing files.
 """.strip()
 
 
