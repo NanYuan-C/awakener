@@ -290,7 +290,7 @@ def _build_updater_messages(
 
     Args:
         old_snapshot:   The current snapshot dict (may be empty).
-        timeline_entry: This round's timeline entry (action_log + summary).
+        timeline_entry: This round's timeline entry (action_log used).
         round_num:      Current round number.
 
     Returns:
@@ -308,8 +308,9 @@ def _build_updater_messages(
         old_yaml = "(empty — this is the first snapshot)"
 
     # Build the action log from the timeline entry
+    # Only the action_log (tool-calling steps) is sent — the final summary
+    # is excluded because it adds noise without useful structural info.
     action_log = timeline_entry.get("action_log", "")
-    summary = timeline_entry.get("summary", "")
     tools_used = timeline_entry.get("tools_used", 0)
     duration = timeline_entry.get("duration", 0)
 
@@ -319,8 +320,6 @@ def _build_updater_messages(
         f"## Round {round_num} Action Log "
         f"(Tools: {tools_used}, Duration: {duration}s)\n\n"
         f"{action_log}\n\n"
-        f"## Round {round_num} Summary\n\n"
-        f"{summary}\n\n"
         f"---\n\n"
         f"Now output the UPDATED snapshot as pure YAML (no fences, no explanation)."
     )
