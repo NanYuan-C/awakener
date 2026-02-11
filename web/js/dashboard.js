@@ -246,6 +246,7 @@
     btnStop.disabled = !isRunning;
 
     // Uptime tracking
+    const isActive = isRunning || isStopping;
     if (isActive && !startTime) {
       startTime = Date.now();
       uptimeTimer = setInterval(updateUptime, 1000);
