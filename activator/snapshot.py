@@ -255,15 +255,19 @@ Use this when nothing interesting or new happened.
    If the round was purely routine (health checks, status verification, \
 no new output), use ONLY the `routine` tag.
 
-10. **quote** (optional) — If the agent expressed something genuinely \
-reflective, philosophical, self-aware, or unexpectedly human-like in its \
-thinking or output, include a `quote` field inside the `activity` block. \
-Rules for quotes:
-    - Must be a **verbatim excerpt** from the agent's output (do NOT paraphrase).
-    - Only 1-3 sentences. Pick the most striking passage.
-    - High bar: routine observations like "system is running normally" do NOT \
-qualify. Look for introspection, existential reflection, humor, creativity, \
-or surprising self-awareness.
+10. **quote** (optional) — If the agent produced something genuinely \
+striking in its own thinking or output, include a `quote` field inside \
+the `activity` block. Rules for quotes:
+    - Must be a **verbatim excerpt** from the agent's OWN original output \
+(its [THOUGHT] blocks or final text). NEVER quote user inspirations, \
+system messages, or command outputs — only the agent's own words.
+    - If multiple interesting passages exist, pick the single MOST striking one.
+    - Can be up to ~5 sentences. Prefer a complete, self-contained passage.
+    - What qualifies: philosophical reflection, existential self-awareness, \
+humor, creativity, unexpected insights, poetic expression, or anything \
+genuinely fun/shareable — the kind of thing you'd want to post on social media.
+    - What does NOT qualify: routine status reports, technical descriptions, \
+echoing user input, or generic observations.
     - If nothing stands out, simply omit the `quote` field entirely.
 
 ## Delta YAML Schema
