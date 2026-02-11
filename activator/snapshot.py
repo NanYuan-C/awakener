@@ -16,9 +16,10 @@ Workflow:
     1. After each round, the activator calls ``update_snapshot()``
        with the current timeline entry (this round's action log + results).
     2. A lightweight LLM call analyzes the timeline against the existing
-       snapshot and returns an updated version.
-    3. The new snapshot is saved to ``data/snapshot.yaml``.
-    4. On the next round, ``load_snapshot()`` reads it and injects it
+       snapshot and returns a **delta** (add/update/remove only).
+    3. The delta is merged into the existing snapshot by ``_merge_delta()``.
+    4. The merged snapshot is saved to ``data/snapshot.yaml``.
+    5. On the next round, ``load_snapshot()`` reads it and injects it
        into the system prompt so the agent has full situational awareness.
 
 Error handling:
@@ -29,6 +30,7 @@ Error handling:
 Storage: data/snapshot.yaml (YAML for readability and LLM compatibility)
 """
 
+import copy
 import os
 import yaml
 import litellm
@@ -211,73 +213,215 @@ SNAPSHOT_UPDATER_PROMPT = """\
 You are a system auditor for an autonomous AI agent's Linux server.
 
 Your job: given the agent's action log from this round and the current system \
-snapshot, produce an UPDATED snapshot in YAML format.
+snapshot, output ONLY the **changes** (delta) in YAML format. The program will \
+merge your delta into the existing snapshot automatically.
 
 ## Rules
 
-1. **Incremental update** — only modify what changed. Do not remove entries \
-unless the agent explicitly deleted something.
+1. **Delta only** — do NOT reproduce the entire snapshot. Only output what \
+changed this round: new entries, updated fields, or removed entries.
 2. **Fact-based only** — only record actions you can confirm from the log. \
 Never invent files, services, or paths not mentioned.
 3. **Service detection** — if the agent started a process that listens on a \
-port (python server, node, nginx, etc.), add or update it in `services`.
+port (python server, node, nginx, etc.), add or update it in the delta.
 4. **Health inference** — if curl/wget returned 200, mark healthy. If 404/500 \
 or connection refused, mark degraded or down.
 5. **Issue tracking** — if you notice errors, failures, or anomalies in the \
-log, add them to `issues`. If a previous issue appears resolved, change its \
-status to "resolved".
+log, add them. If a previous issue appears resolved, update its status to \
+"resolved".
 6. **Keep it concise** — short descriptions, no verbosity.
 7. **Output ONLY valid YAML** — no markdown fences, no explanation text. \
 The entire response must be parseable as YAML.
+8. **No changes** — if nothing in the action log warrants a snapshot update, \
+output ONLY: `no_changes: true`
 
-## YAML Schema
+## Delta YAML Schema
 
 ```yaml
-meta:
-  last_updated: "YYYY-MM-DD HH:MM:SS UTC"
-  round: <int>
+no_changes: false    # Set to true if nothing changed; omit all sections below
 
-services:            # List of network services
-  - name: <string>
-    port: <int>
-    domain: <string or null>
-    status: running | stopped | error
-    health: healthy | degraded | down | unknown
-    health_note: <string or null>
-    path: <string>             # Project/working directory
-    start_cmd: <string>        # How to start/restart
+add:                 # New entries to append
+  services:
+    - name: <string>
+      port: <int>
+      domain: <string or null>
+      status: running | stopped | error
+      health: healthy | degraded | down | unknown
+      health_note: <string or null>
+      path: <string>
+      start_cmd: <string>
+  projects:
+    - name: <string>
+      path: <string>
+      stack: <string>
+      entry: <string or null>
+      description: <string>
+  tools:
+    - path: <string>
+      usage: <string>
+  documents:
+    - path: <string>
+      purpose: <string>
+  issues:
+    - severity: critical | high | medium | low
+      summary: <string>
+      detail: <string or null>
+      discovered: <int>
+      status: open
 
-projects:            # Directories the agent created/manages
-  - name: <string>
-    path: <string>
-    stack: <string>            # e.g. "Python / FastAPI"
-    entry: <string or null>    # Main entry file
-    description: <string>
+update:              # Existing entries to modify (include key field + changed fields only)
+  services:          # Match by "name"
+    - name: <string>
+      <field>: <new_value>
+  projects:          # Match by "path"
+    - path: <string>
+      <field>: <new_value>
+  tools:             # Match by "path"
+    - path: <string>
+      usage: <new_value>
+  documents:         # Match by "path"
+    - path: <string>
+      purpose: <new_value>
+  issues:            # Match by "summary"
+    - summary: <string>
+      status: resolved
+  environment:       # Direct key-value update (no matching needed)
+    <key>: <new_value>
 
-tools:               # Scripts/executables the agent created
-  - path: <string>
-    usage: <string>            # One-line usage hint
-
-documents:           # Important files the agent maintains
-  - path: <string>
-    purpose: <string>
-
-environment:
-  os: <string or null>
-  python: <string or null>
-  domain: <string or null>
-  ssl: <bool>
-  disk_usage: <string or null>
-  key_packages: [<string>, ...]
-
-issues:              # Known problems
-  - severity: critical | high | medium | low
-    summary: <string>
-    detail: <string or null>
-    discovered: <int>          # Round number
-    status: open | resolved
+remove:              # Entries to delete (include only the key field)
+  services:
+    - name: <string>
+  projects:
+    - path: <string>
+  tools:
+    - path: <string>
+  documents:
+    - path: <string>
+  issues:
+    - summary: <string>
 ```
+
+## Key Matching Rules
+
+- `services`: matched by `name`
+- `projects`: matched by `path`
+- `tools`: matched by `path`
+- `documents`: matched by `path`
+- `issues`: matched by `summary`
+- `environment`: direct key-value merge (no matching)
+
+Only include sections that have actual changes. Omit empty sections.
 """.strip()
+
+
+# Key field used to identify entries within each list section.
+# Used by _merge_delta() for matching update/remove targets.
+_SECTION_KEYS: dict[str, str] = {
+    "services": "name",
+    "projects": "path",
+    "tools": "path",
+    "documents": "path",
+    "issues": "summary",
+}
+
+
+def _merge_delta(old_snapshot: dict, delta: dict, round_num: int) -> dict:
+    """
+    Merge an LLM-produced delta into the existing snapshot.
+
+    The delta may contain ``add``, ``update``, and ``remove`` sections.
+    If ``no_changes`` is true, only the meta block is bumped.
+
+    Args:
+        old_snapshot: The current snapshot dict (may be empty).
+        delta:        Parsed delta dict from the LLM.
+        round_num:    Current round number (written into meta).
+
+    Returns:
+        The merged snapshot dict.
+    """
+    snapshot = copy.deepcopy(old_snapshot) if old_snapshot else {}
+
+    # Ensure meta exists
+    if "meta" not in snapshot:
+        snapshot["meta"] = {}
+    snapshot["meta"]["round"] = round_num
+    snapshot["meta"]["last_updated"] = (
+        datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    )
+
+    # Short-circuit: nothing changed
+    if delta.get("no_changes"):
+        return snapshot
+
+    # --- ADD: append new entries to list sections ---
+    add_block = delta.get("add") or {}
+    for section, key_field in _SECTION_KEYS.items():
+        new_entries = add_block.get(section)
+        if not new_entries or not isinstance(new_entries, list):
+            continue
+        if section not in snapshot:
+            snapshot[section] = []
+        existing_keys = {
+            entry.get(key_field) for entry in snapshot[section]
+            if isinstance(entry, dict)
+        }
+        for entry in new_entries:
+            if not isinstance(entry, dict):
+                continue
+            # Skip duplicates (already exists with same key)
+            if entry.get(key_field) in existing_keys:
+                continue
+            snapshot[section].append(entry)
+            existing_keys.add(entry.get(key_field))
+
+    # --- UPDATE: modify existing entries ---
+    update_block = delta.get("update") or {}
+    for section, key_field in _SECTION_KEYS.items():
+        updates = update_block.get(section)
+        if not updates or not isinstance(updates, list):
+            continue
+        if section not in snapshot:
+            continue
+        for patch in updates:
+            if not isinstance(patch, dict):
+                continue
+            match_val = patch.get(key_field)
+            if match_val is None:
+                continue
+            # Find the target entry and merge fields
+            for entry in snapshot[section]:
+                if isinstance(entry, dict) and entry.get(key_field) == match_val:
+                    for k, v in patch.items():
+                        entry[k] = v
+                    break
+
+    # --- UPDATE: environment (direct dict merge, no key matching) ---
+    env_update = update_block.get("environment")
+    if env_update and isinstance(env_update, dict):
+        if "environment" not in snapshot:
+            snapshot["environment"] = {}
+        snapshot["environment"].update(env_update)
+
+    # --- REMOVE: delete entries from list sections ---
+    remove_block = delta.get("remove") or {}
+    for section, key_field in _SECTION_KEYS.items():
+        removals = remove_block.get(section)
+        if not removals or not isinstance(removals, list):
+            continue
+        if section not in snapshot:
+            continue
+        remove_keys = set()
+        for entry in removals:
+            if isinstance(entry, dict) and entry.get(key_field):
+                remove_keys.add(entry[key_field])
+        if remove_keys:
+            snapshot[section] = [
+                entry for entry in snapshot[section]
+                if not (isinstance(entry, dict) and entry.get(key_field) in remove_keys)
+            ]
+
+    return snapshot
 
 
 def _build_updater_messages(
@@ -321,7 +465,8 @@ def _build_updater_messages(
         f"(Tools: {tools_used}, Duration: {duration}s)\n\n"
         f"{action_log}\n\n"
         f"---\n\n"
-        f"Now output the UPDATED snapshot as pure YAML (no fences, no explanation)."
+        f"Now output ONLY the delta (changes) as pure YAML (no fences, no explanation). "
+        f"If nothing changed, output: no_changes: true"
     )
 
     return [
@@ -436,34 +581,34 @@ def update_snapshot(
 
             content = response.choices[0].message.content or ""
 
-            # Parse YAML
-            new_snapshot = _parse_yaml_response(content)
-            if not new_snapshot:
-                raise ValueError("LLM returned invalid YAML")
+            # Parse YAML delta
+            delta = _parse_yaml_response(content)
+            if not delta:
+                raise ValueError("LLM returned invalid YAML delta")
 
-            # Ensure meta is up to date
-            if "meta" not in new_snapshot:
-                new_snapshot["meta"] = {}
-            new_snapshot["meta"]["last_updated"] = (
-                datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-            )
-            new_snapshot["meta"]["round"] = round_num
+            # Merge delta into existing snapshot
+            no_changes = bool(delta.get("no_changes"))
+            new_snapshot = _merge_delta(old_snapshot, delta, round_num)
 
             # Save to disk
             save_snapshot(data_dir, new_snapshot)
 
             if logger:
-                svc_count = len(new_snapshot.get("services", []))
-                proj_count = len(new_snapshot.get("projects", []))
-                issue_count = len(
-                    [i for i in new_snapshot.get("issues", []) if i.get("status") == "open"]
-                )
-                logger.info(
-                    f"[SNAPSHOT] Updated — "
-                    f"{svc_count} services, "
-                    f"{proj_count} projects, "
-                    f"{issue_count} open issues"
-                )
+                if no_changes:
+                    logger.info("[SNAPSHOT] No changes this round")
+                else:
+                    svc_count = len(new_snapshot.get("services", []))
+                    proj_count = len(new_snapshot.get("projects", []))
+                    issue_count = len(
+                        [i for i in new_snapshot.get("issues", [])
+                         if i.get("status") == "open"]
+                    )
+                    logger.info(
+                        f"[SNAPSHOT] Updated — "
+                        f"{svc_count} services, "
+                        f"{proj_count} projects, "
+                        f"{issue_count} open issues"
+                    )
 
             return new_snapshot
 
