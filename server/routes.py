@@ -583,6 +583,21 @@ def create_router(
         return {"message": f"Skill '{name}' deleted"}
 
     # =========================================================================
+    # SNAPSHOT ROUTE - Requires authentication
+    # =========================================================================
+
+    @router.get("/snapshot", dependencies=[auth])
+    async def get_snapshot():
+        """
+        Get the current system snapshot (asset inventory).
+        Returns the content of data/snapshot.yaml as a JSON object.
+        """
+        from activator.snapshot import load_snapshot
+
+        data_dir = os.path.join(config_manager.project_dir, "data")
+        return load_snapshot(data_dir)
+
+    # =========================================================================
     # TIMELINE ROUTE - Requires authentication
     # =========================================================================
 
