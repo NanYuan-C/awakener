@@ -8,6 +8,8 @@ The context consists of two parts:
 1. System message:
    - The persona prompt (loaded from prompts/*.md)
    - Appended tool documentation and rules
+   - Installed skills index (progressive disclosure)
+   - System snapshot (asset inventory — services, projects, issues)
 
 2. User message:
    - Current time and round number
@@ -26,6 +28,7 @@ import os
 from datetime import datetime, timezone
 from activator.memory import MemoryManager
 from activator.tools import scan_skills
+from activator.snapshot import load_snapshot, render_snapshot_markdown
 
 
 # =============================================================================
@@ -174,22 +177,27 @@ def build_system_message(
     project_dir: str,
     persona_name: str,
     skills_dir: str = "",
+    data_dir: str = "",
 ) -> str:
     """
-    Build the full system message: persona + tool docs + skills index.
+    Build the full system message: persona + tool docs + skills + snapshot.
 
     The system message is static for the duration of a round.
-    It defines who the agent is, what tools it can use, and which
-    skills are available.
+    It defines who the agent is, what tools it can use, which skills
+    are available, and the current system snapshot (asset inventory).
 
     Skills are presented as a concise index table. The agent must call
     ``skill_read(name)`` to get the full instructions (progressive
     disclosure — saves tokens when skills are not needed this round).
 
+    The system snapshot provides an objective view of the agent's
+    server environment so it doesn't waste tools re-discovering things.
+
     Args:
         project_dir:  Awakener project root.
         persona_name: Active persona name.
         skills_dir:   Path to ``data/skills/`` directory.
+        data_dir:     Path to ``data/`` directory (for snapshot).
 
     Returns:
         Complete system message string.
@@ -217,6 +225,14 @@ def build_system_message(
             for s in enabled:
                 desc = s.get("description", "") or s.get("title", s["name"])
                 parts.append(f"| {s['name']} | {desc} |")
+
+    # Append system snapshot (asset inventory)
+    if data_dir:
+        snapshot = load_snapshot(data_dir)
+        snapshot_md = render_snapshot_markdown(snapshot)
+        if snapshot_md:
+            parts.append("")
+            parts.append(snapshot_md)
 
     return "\n".join(parts)
 

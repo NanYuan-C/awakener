@@ -36,6 +36,7 @@ from activator.tools import ToolExecutor, detect_host_env
 from activator.context import build_system_message, build_user_message
 from activator.agent import run_round
 from activator.wakeup_note import ensure_wakeup_note
+from activator.snapshot import update_snapshot, SnapshotUpdateError
 
 
 # =============================================================================
@@ -319,6 +320,7 @@ def run_activation_loop(
     max_output = agent_config.get("max_output_chars", 4000)
     persona = "default"  # Single global prompt (always default.md)
     safety_bypass = agent_config.get("safety_bypass", False)
+    snapshot_model = agent_config.get("snapshot_model", "") or ""
 
     # API key: try environment variable based on model provider
     api_key = _resolve_api_key(model)
@@ -377,14 +379,15 @@ def run_activation_loop(
             max_output = _live_cfg.get("max_output_chars", max_output)
             interval = _live_cfg.get("interval", interval)
             safety_bypass = _live_cfg.get("safety_bypass", safety_bypass)
+            snapshot_model = _live_cfg.get("snapshot_model", "") or ""
         except Exception:
             pass  # Keep previous values if reload fails
 
         if state_callback:
             state_callback({"state": "running", "round": round_num})
 
-        # Build context messages
-        system_msg = build_system_message(project_dir, persona, skills_dir)
+        # Build context messages (includes snapshot + skills)
+        system_msg = build_system_message(project_dir, persona, skills_dir, data_dir)
 
         # When safety_bypass is on, inject self-awareness warning
         awareness = None
@@ -440,6 +443,14 @@ def run_activation_loop(
         duration = time.time() - round_start_time
 
         # Record to timeline
+        timeline_entry = {
+            "round": round_num,
+            "tools_used": result.tools_used,
+            "duration": round(duration, 1),
+            "summary": result.summary,
+            "action_log": result.action_log,
+            "notebook_saved": result.notebook_saved,
+        }
         memory.append_timeline(
             round_num=round_num,
             tools_used=result.tools_used,
@@ -460,14 +471,43 @@ def run_activation_loop(
                 "summary": result.summary[:200],
             })
 
+        # -- System Snapshot Update --
+        # Run the LLM auditor to update the asset inventory.
+        # On double failure (snapshot model + main model), stop the loop.
+        try:
+            update_snapshot(
+                data_dir=data_dir,
+                timeline_entry=timeline_entry,
+                round_num=round_num,
+                snapshot_model=snapshot_model if snapshot_model else None,
+                main_model=model,
+                api_key=api_key,
+                logger=logger,
+            )
+        except SnapshotUpdateError as e:
+            error_msg = (
+                f"[SNAPSHOT] CRITICAL — snapshot update failed on all models: {e}. "
+                "Stopping activation loop."
+            )
+            logger.info(error_msg)
+            if state_callback:
+                state_callback({
+                    "state": "error",
+                    "round": round_num,
+                    "error": error_msg,
+                })
+            break
+
         # Advance round counter
         round_num += 1
 
         # -- Explicit memory cleanup --
-        del messages, system_msg, user_msg, tool_exec, result
+        del messages, system_msg, user_msg, tool_exec, result, timeline_entry
         gc.collect()
 
         # -- Wait for interval (or stop_event) --
+        # The interval timer starts AFTER the snapshot update completes,
+        # so the audit does not eat into the wait time.
         if interval > 0 and not stop_event.is_set():
             logger.waiting(interval)
             # Use stop_event.wait() so we can be interrupted immediately

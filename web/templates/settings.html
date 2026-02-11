@@ -100,6 +100,26 @@
 </div>
 
 <!-- ====================================================================== -->
+<!-- Snapshot Auditor                                                       -->
+<!-- ====================================================================== -->
+<div class="settings-section">
+  <h2 data-i18n="settings.snapshot">System Snapshot</h2>
+  <div class="card">
+    <div class="form-group">
+      <label for="snapshot-model" data-i18n="settings.snapshotModel">Snapshot Auditor Model</label>
+      <input type="text" id="snapshot-model" class="form-control" style="max-width:400px;"
+             placeholder="e.g. deepseek/deepseek-chat">
+      <div class="hint" data-i18n="settings.snapshotModelHint">
+        The LLM model used to maintain the system asset inventory after each round. Leave empty to use the main agent model.
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="saveSnapshotConfig()">
+      <span data-i18n="settings.save">Save</span>
+    </button>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
 <!-- Change Password                                                        -->
 <!-- ====================================================================== -->
 <div class="settings-section">

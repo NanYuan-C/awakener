@@ -32,6 +32,7 @@ DEFAULTS = {
     "agent": {
         "home": "/home/agent",
         "model": "deepseek/deepseek-chat",
+        "snapshot_model": "",
         "interval": 60,
         "max_tool_calls": 20,
         "shell_timeout": 30,

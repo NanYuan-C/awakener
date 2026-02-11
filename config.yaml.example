@@ -35,6 +35,12 @@ agent:
   #   - "anthropic/claude-sonnet-4-20250514"   (Anthropic Claude Sonnet)
   model: "deepseek/deepseek-chat"
 
+  # LLM model for the system snapshot auditor.
+  # The snapshot auditor updates the agent's asset inventory after each round.
+  # Leave empty to use the same model as the agent.
+  # Recommended: use a fast, cheap model (e.g. "deepseek/deepseek-chat").
+  snapshot_model: ""
+
   # Time in seconds between activation rounds.
   # Set to 0 for continuous operation (no delay between rounds).
   # Recommended: 60 for normal use, 0 for fast testing.

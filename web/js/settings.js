@@ -318,6 +318,35 @@
   };
 
   // ========================================================================
+  // Snapshot Auditor Configuration
+  // ========================================================================
+
+  /**
+   * Populate the snapshot model field from config.
+   * @param {Object} config - The full configuration object.
+   */
+  function populateSnapshotConfig(config) {
+    var agent = config.agent || {};
+    document.getElementById('snapshot-model').value = agent.snapshot_model || '';
+  }
+
+  /**
+   * Save the snapshot auditor model to the server.
+   */
+  window.saveSnapshotConfig = async function() {
+    try {
+      await api.put('/api/config', {
+        agent: {
+          snapshot_model: document.getElementById('snapshot-model').value.trim(),
+        }
+      });
+      toast('Snapshot configuration saved', 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+
+  // ========================================================================
   // Password Change
   // ========================================================================
 
@@ -434,6 +463,7 @@
       var config = await api.get('/api/config');
       populateModelConfig(config);
       populateAgentParams(config);
+      populateSnapshotConfig(config);
     } catch (e) {
       toast('Failed to load configuration: ' + e.message, 'error');
     }
