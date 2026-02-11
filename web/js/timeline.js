@@ -129,27 +129,47 @@
   }
 
   /**
-   * Build collapsed summary: first thought + first 20 lines of output.
-   * @param {string} actionLog - Brief action log (thoughts from tool turns).
-   * @param {string} summary - Full summary text.
+   * Build collapsed summary: first thought + first 20 lines of formal output.
+   * The summary field mixes [Thinking] lines and formal content together.
+   * We split them: first [Thinking] line as the thought, then find the
+   * formal content (lines without [Thinking] tag) and show its first 20 lines.
+   * @param {string} actionLog - Brief action log (unused, kept for API compat).
+   * @param {string} summary - Full summary text (thinking + formal output).
    * @returns {string} HTML for collapsed view.
    */
   function buildCollapsedSummary(actionLog, summary) {
-    var html = '';
+    if (!summary) return '<p class="text-muted">(no content)</p>';
 
-    // Extract first thought from action_log
-    var firstThought = extractFirstThought(actionLog);
-    if (firstThought) {
-      html += '<div class="timeline-thought">' +
-              '<strong>[First Thought]</strong><br>' +
-              escapeHtml(firstThought) +
-              '</div>';
+    var html = '';
+    var lines = summary.split('\n');
+
+    // 1. Extract first [Thinking] line
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].includes('[Thinking]')) {
+        var match = lines[i].match(/\[Thinking\]\s*(.*)/);
+        if (match && match[1]) {
+          html += '<div class="timeline-thought">' +
+                  '<strong>[Thinking]</strong> ' +
+                  escapeHtml(match[1].trim()) +
+                  '</div>';
+          break;
+        }
+      }
     }
 
-    // Extract first 20 lines from summary (the beginning of the final output)
-    var firstLines = extractFirstLines(summary, 20);
-    if (firstLines) {
-      html += '<pre class="timeline-output">' + escapeHtml(firstLines) + '</pre>';
+    // 2. Extract formal output: lines that do NOT start with [Thinking]
+    var formalLines = [];
+    for (var j = 0; j < lines.length; j++) {
+      var trimmed = lines[j].trim();
+      // Skip lines containing [Thinking] tag (with or without timestamp prefix)
+      if (trimmed === '' && formalLines.length === 0) continue; // skip leading blanks
+      if (/\[Thinking\]/.test(lines[j])) continue;
+      formalLines.push(lines[j]);
+    }
+
+    if (formalLines.length > 0) {
+      var preview = formalLines.slice(0, 20).join('\n');
+      html += '<pre class="timeline-output">' + escapeHtml(preview) + '</pre>';
     }
 
     return html || '<p class="text-muted">(no content)</p>';
