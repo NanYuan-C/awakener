@@ -1713,6 +1713,24 @@ select.form-control {
 .tag-routine     { background: var(--color-bg); color: var(--color-text-light); }
 .tag-default     { background: var(--color-bg); color: var(--color-text-light); }
 
+/* -- Quote (verbatim agent excerpt) --------------------------------------- */
+
+.feed-quote {
+  margin: var(--spacing-sm) 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-left: 3px solid var(--color-primary);
+  background: var(--color-primary-light);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-style: italic;
+  font-size: var(--font-size-sm);
+  line-height: 1.65;
+  color: var(--color-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* -- Detail link ---------------------------------------------------------- */
+
 .feed-detail-link {
   font-size: var(--font-size-sm);
   color: var(--color-primary);

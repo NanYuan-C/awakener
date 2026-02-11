@@ -255,6 +255,17 @@ Use this when nothing interesting or new happened.
    If the round was purely routine (health checks, status verification, \
 no new output), use ONLY the `routine` tag.
 
+10. **quote** (optional) — If the agent expressed something genuinely \
+reflective, philosophical, self-aware, or unexpectedly human-like in its \
+thinking or output, include a `quote` field inside the `activity` block. \
+Rules for quotes:
+    - Must be a **verbatim excerpt** from the agent's output (do NOT paraphrase).
+    - Only 1-3 sentences. Pick the most striking passage.
+    - High bar: routine observations like "system is running normally" do NOT \
+qualify. Look for introspection, existential reflection, humor, creativity, \
+or surprising self-awareness.
+    - If nothing stands out, simply omit the `quote` field entirely.
+
 ## Delta YAML Schema
 
 ```yaml
@@ -262,6 +273,7 @@ activity:
   content: "<1-3 sentence readable post about this round>"
   tags:
     - <tag>
+  quote: "<optional verbatim excerpt — only if genuinely interesting>"
 
 no_changes: false    # Set to true if nothing changed; omit all sections below
 
@@ -552,6 +564,7 @@ def _append_feed(data_dir: str, delta: dict, round_num: int) -> None:
         - timestamp: ISO 8601 UTC string
         - content: activity description
         - tags: list of tag strings
+        - quote: (optional) verbatim excerpt from agent output
 
     This file is the source-of-truth for the activity feed and is
     independent of the snapshot's sliding window. It grows indefinitely
@@ -580,6 +593,11 @@ def _append_feed(data_dir: str, delta: dict, round_num: int) -> None:
         "content": content.strip(),
         "tags": [t.strip() for t in tags if isinstance(t, str)],
     }
+
+    # Optional: verbatim quote from agent output
+    quote = activity.get("quote", "")
+    if quote and isinstance(quote, str) and quote.strip():
+        entry["quote"] = quote.strip()
 
     feed_path = os.path.join(data_dir, "feed.jsonl")
     try:
