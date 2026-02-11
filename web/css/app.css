@@ -1545,3 +1545,82 @@ select.form-control {
     width: 100%;
   }
 }
+
+/* ==========================================================================
+   Feed Page
+   ========================================================================== */
+
+.feed-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.feed-card:hover {
+  border-color: var(--color-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.feed-card-routine {
+  opacity: 0.7;
+}
+
+.feed-card-routine:hover {
+  opacity: 1;
+}
+
+.feed-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-light);
+}
+
+.feed-round {
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.feed-time {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.feed-content {
+  font-size: var(--font-size-base);
+  line-height: 1.65;
+  color: var(--color-text);
+  margin-bottom: var(--spacing-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.feed-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs);
+}
+
+.feed-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2em;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.tag-milestone   { background: #fef3c7; color: #92400e; }
+.tag-creation    { background: #dbeafe; color: #1e40af; }
+.tag-exploration { background: #d1fae5; color: #065f46; }
+.tag-fix         { background: #fce7f3; color: #9d174d; }
+.tag-discovery   { background: #ede9fe; color: #5b21b6; }
+.tag-routine     { background: var(--color-bg); color: var(--color-text-light); }
+.tag-default     { background: var(--color-bg); color: var(--color-text-light); }

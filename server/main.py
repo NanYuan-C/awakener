@@ -173,6 +173,13 @@ def create_app(project_dir: str | None = None) -> FastAPI:
             "skills.html", {"request": request, "page_id": "skills"}
         )
 
+    @app.get("/feed")
+    async def feed_page(request: Request):
+        """Activity feed - social-media-style agent activity posts."""
+        return templates.TemplateResponse(
+            "feed.html", {"request": request, "page_id": "feed"}
+        )
+
     @app.get("/timeline")
     async def timeline_page(request: Request):
         """Timeline view - chronological agent activity history."""

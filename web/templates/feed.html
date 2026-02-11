@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Feed - Awakener{% endblock %}
+{% block page_title %}Activity Feed{% endblock %}
+
+{% block content %}
+<!--
+  Feed Page
+  =========
+  Social-media-style activity feed showing the agent's notable activities.
+    - Each round produces one activity entry with content and tags
+    - Tags: routine, milestone, creation, exploration, fix, discovery
+    - Filterable by tag
+    - Lazy loading with "Load More" button
+-->
+
+<!-- ====================================================================== -->
+<!-- Toolbar                                                                -->
+<!-- ====================================================================== -->
+<div class="flex flex-between flex-center mb-lg flex-wrap gap-sm">
+  <div class="flex gap-sm flex-wrap">
+    <button class="btn btn-sm btn-outline filter-btn active" data-filter="all" onclick="setFeedFilter('all')">
+      <span data-i18n="feed.all">All</span>
+    </button>
+    <button class="btn btn-sm btn-outline filter-btn" data-filter="notable" onclick="setFeedFilter('notable')">
+      &#x2B50; <span data-i18n="feed.notable">Notable</span>
+    </button>
+    <button class="btn btn-sm btn-outline filter-btn" data-filter="milestone" onclick="setFeedFilter('milestone')">
+      &#x1F3C6; <span data-i18n="feed.milestone">Milestone</span>
+    </button>
+    <button class="btn btn-sm btn-outline filter-btn" data-filter="creation" onclick="setFeedFilter('creation')">
+      &#x1F528; <span data-i18n="feed.creation">Creation</span>
+    </button>
+    <button class="btn btn-sm btn-outline filter-btn" data-filter="exploration" onclick="setFeedFilter('exploration')">
+      &#x1F50D; <span data-i18n="feed.exploration">Exploration</span>
+    </button>
+    <button class="btn btn-sm btn-outline filter-btn" data-filter="fix" onclick="setFeedFilter('fix')">
+      &#x1F527; <span data-i18n="feed.fix">Fix</span>
+    </button>
+    <button class="btn btn-sm btn-outline filter-btn" data-filter="discovery" onclick="setFeedFilter('discovery')">
+      &#x1F4A1; <span data-i18n="feed.discovery">Discovery</span>
+    </button>
+    <button class="btn btn-sm btn-outline filter-btn" data-filter="routine" onclick="setFeedFilter('routine')">
+      &#x1F504; <span data-i18n="feed.routine">Routine</span>
+    </button>
+  </div>
+  <div class="flex gap-sm">
+    <button class="btn btn-sm btn-outline" onclick="loadFeed(true)">
+      &#x1F504; <span data-i18n="feed.refresh">Refresh</span>
+    </button>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- Feed entries                                                           -->
+<!-- ====================================================================== -->
+<div id="feed-list">
+  <div class="empty-state">
+    <div class="empty-state-icon">&#x1F4E1;</div>
+    <p data-i18n="feed.loading">Loading feed...</p>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- Load More Button                                                       -->
+<!-- ====================================================================== -->
+<div class="flex flex-center mt-lg" id="feed-load-more" style="display:none;">
+  <button class="btn btn-outline" onclick="loadMoreFeed()">
+    <span data-i18n="feed.loadMore">Load More</span>
+  </button>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/js/feed.js"></script>
+{% endblock %}

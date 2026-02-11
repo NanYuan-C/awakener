@@ -31,6 +31,7 @@ const messages = {
       settings: "Settings",
       prompts: "Prompt",
       skills: "Skills",
+      feed: "Feed",
       timeline: "Timeline",
       snapshot: "Snapshot",
       logout: "Logout",
@@ -173,6 +174,23 @@ const messages = {
       uploadNoDesc: "SKILL.md frontmatter is missing a 'description' field",
     },
 
+    // -- Feed --
+    feed: {
+      title: "Activity Feed",
+      all: "All",
+      notable: "Notable",
+      milestone: "Milestone",
+      creation: "Creation",
+      exploration: "Exploration",
+      fix: "Fix",
+      discovery: "Discovery",
+      routine: "Routine",
+      refresh: "Refresh",
+      loading: "Loading feed...",
+      loadMore: "Load More",
+      noData: "No activities yet.",
+    },
+
     // -- Timeline --
     timeline: {
       title: "Timeline",
@@ -232,6 +250,7 @@ const messages = {
       settings: "设置",
       prompts: "提示词",
       skills: "技能",
+      feed: "动态",
       timeline: "时间线",
       snapshot: "系统快照",
       logout: "退出",
@@ -365,6 +384,22 @@ const messages = {
       uploadNoFrontmatter: "SKILL.md 必须以 YAML 前置元数据开头（--- 分隔符）",
       uploadNoName: "SKILL.md 前置元数据缺少 name 字段",
       uploadNoDesc: "SKILL.md 前置元数据缺少 description 字段",
+    },
+
+    feed: {
+      title: "动态",
+      all: "全部",
+      notable: "精选",
+      milestone: "里程碑",
+      creation: "创造",
+      exploration: "探索",
+      fix: "修复",
+      discovery: "发现",
+      routine: "日常",
+      refresh: "刷新",
+      loading: "加载动态中...",
+      loadMore: "加载更多",
+      noData: "暂无动态。",
     },
 
     timeline: {

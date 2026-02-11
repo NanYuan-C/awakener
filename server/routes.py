@@ -10,6 +10,7 @@ Route groups:
     /api/agent/*     - Agent lifecycle control (start / stop / restart / status / inspiration)
     /api/prompt      - Single global prompt management (read / update default.md)
     /api/skills/*    - Skill management (list / get / add / toggle / delete)
+    /api/feed        - Activity feed (agent's notable activities, from feed.jsonl)
     /api/timeline    - Timeline data access (one entry per round)
     /api/logs        - Activator run logs (per-day files)
 
@@ -580,6 +581,37 @@ def create_router(
             _save_skills_config(skills_dir, config)
 
         return {"message": f"Skill '{name}' deleted"}
+
+    # =========================================================================
+    # FEED ROUTE - Requires authentication
+    # =========================================================================
+
+    @router.get("/feed", dependencies=[auth])
+    async def get_feed():
+        """
+        Get the agent's activity feed from data/feed.jsonl.
+        Returns entries in reverse chronological order (newest first).
+        Each entry has: round, timestamp, content, tags.
+        """
+        data_dir = os.path.join(config_manager.project_dir, "data")
+        feed_path = os.path.join(data_dir, "feed.jsonl")
+
+        entries = []
+        if os.path.exists(feed_path):
+            try:
+                with open(feed_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line:
+                            try:
+                                entries.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                continue
+            except OSError:
+                pass
+
+        entries.reverse()
+        return {"entries": entries, "total": len(entries)}
 
     # =========================================================================
     # SNAPSHOT ROUTE - Requires authentication
