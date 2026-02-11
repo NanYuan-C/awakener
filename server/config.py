@@ -90,6 +90,9 @@ class ConfigManager:
             try:
                 with open(self.config_path, "r", encoding="utf-8") as f:
                     user_config = yaml.safe_load(f) or {}
+                # Merge user config ON TOP of defaults.
+                # This way, new keys added to DEFAULTS in future updates
+                # will be present even if the user's config.yaml is old.
                 _deep_merge(config, user_config)
             except (yaml.YAMLError, OSError) as e:
                 # If config file is corrupted, fall back to defaults

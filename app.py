@@ -47,6 +47,24 @@ def main():
     # -- Resolve project directory ---------------------------------------------
     project_dir = os.path.dirname(os.path.abspath(__file__))
 
+    # -- Ensure configuration files exist --------------------------------------
+    # If config.yaml or prompts/default.md are missing, create them from examples.
+    # This prevents overwriting user customization on updates while ensuring
+    # new installations work out of the box.
+    config_path = os.path.join(project_dir, "config.yaml")
+    config_example = os.path.join(project_dir, "config.yaml.example")
+    if not os.path.exists(config_path) and os.path.exists(config_example):
+        import shutil
+        shutil.copy2(config_example, config_path)
+        print(f"[INIT] Created config.yaml from template")
+
+    prompt_path = os.path.join(project_dir, "prompts", "default.md")
+    prompt_example = os.path.join(project_dir, "prompts", "default.md.example")
+    if not os.path.exists(prompt_path) and os.path.exists(prompt_example):
+        import shutil
+        shutil.copy2(prompt_example, prompt_path)
+        print(f"[INIT] Created prompts/default.md from template")
+
     # -- Load environment variables from .env ----------------------------------
     env_path = os.path.join(project_dir, ".env")
     if os.path.exists(env_path):
