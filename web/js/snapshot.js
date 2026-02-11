@@ -81,13 +81,13 @@
 
     projects.forEach(p => {
       const div = document.createElement('div');
-      div.className = 'project-card p-sm border rounded mb-sm';
+      div.className = 'p-sm border rounded';
       div.innerHTML = `
         <div class="flex justify-between items-center mb-xs">
-          <div class="font-bold text-lg">${escapeHtml(p.name)}</div>
-          <div class="badge badge-blue">${escapeHtml(p.stack)}</div>
+          <div class="font-bold">${escapeHtml(p.name)}</div>
+          <div class="badge badge-blue text-xs">${escapeHtml(p.stack)}</div>
         </div>
-        <div class="text-sm text-muted mb-xs font-mono">${escapeHtml(p.path)}</div>
+        <div class="text-xs text-muted mb-xs font-mono">${escapeHtml(p.path)}</div>
         <div class="text-sm">${escapeHtml(p.description)}</div>
         ${p.entry ? `<div class="text-xs text-muted mt-xs">Entry: ${escapeHtml(p.entry)}</div>` : ''}
       `;

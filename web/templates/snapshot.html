@@ -22,7 +22,7 @@
 </div>
 
 <div id="snapshot-content" class="hidden">
-  <!-- Services -->
+  <!-- Services (full width) -->
   <div class="card mb-md">
     <h3 class="card-title" data-i18n="snapshot.services">Services</h3>
     <div class="table-responsive">
@@ -42,42 +42,43 @@
     <div id="services-empty" class="text-muted text-center py-md hidden" data-i18n="snapshot.noServices">No services found</div>
   </div>
 
-  <!-- Projects -->
-  <div class="card mb-md">
-    <h3 class="card-title" data-i18n="snapshot.projects">Projects</h3>
-    <div id="projects-list" class="grid-list"></div>
-    <div id="projects-empty" class="text-muted text-center py-md hidden" data-i18n="snapshot.noProjects">No projects found</div>
-  </div>
-
-  <div class="flex gap-md wrap-mobile">
-    <!-- Tools -->
-    <div class="card flex-1">
-      <h3 class="card-title" data-i18n="snapshot.tools">Tools</h3>
-      <div id="tools-list" class="list-group"></div>
-      <div id="tools-empty" class="text-muted text-center py-md hidden" data-i18n="snapshot.noTools">No tools found</div>
-    </div>
-
-    <!-- Documents -->
-    <div class="card flex-1">
+  <!-- Two-column layout -->
+  <div class="snapshot-two-col">
+    <!-- Left column: Documents -->
+    <div class="card">
       <h3 class="card-title" data-i18n="snapshot.documents">Documents</h3>
       <div id="documents-list" class="list-group"></div>
       <div id="documents-empty" class="text-muted text-center py-md hidden" data-i18n="snapshot.noDocuments">No documents found</div>
     </div>
-  </div>
 
-  <!-- Environment & Issues -->
-  <div class="flex gap-md wrap-mobile mt-md">
-    <!-- Environment -->
-    <div class="card flex-1">
-      <h3 class="card-title" data-i18n="snapshot.environment">Environment</h3>
-      <div id="env-grid" class="key-value-grid"></div>
-    </div>
+    <!-- Right column: Projects, Tools, Issues, Environment -->
+    <div class="snapshot-right-col">
+      <!-- Projects -->
+      <div class="card mb-md">
+        <h3 class="card-title" data-i18n="snapshot.projects">Projects</h3>
+        <div id="projects-list" class="snapshot-projects-list"></div>
+        <div id="projects-empty" class="text-muted text-center py-md hidden" data-i18n="snapshot.noProjects">No projects found</div>
+      </div>
 
-    <!-- Issues -->
-    <div class="card flex-1">
-      <h3 class="card-title" data-i18n="snapshot.issues">Issues</h3>
-      <div id="issues-list" class="list-group"></div>
-      <div id="issues-empty" class="text-muted text-center py-md hidden" data-i18n="snapshot.noIssues">No open issues</div>
+      <!-- Tools -->
+      <div class="card mb-md">
+        <h3 class="card-title" data-i18n="snapshot.tools">Tools</h3>
+        <div id="tools-list" class="list-group"></div>
+        <div id="tools-empty" class="text-muted text-center py-md hidden" data-i18n="snapshot.noTools">No tools found</div>
+      </div>
+
+      <!-- Issues -->
+      <div class="card mb-md">
+        <h3 class="card-title" data-i18n="snapshot.issues">Issues</h3>
+        <div id="issues-list" class="list-group"></div>
+        <div id="issues-empty" class="text-muted text-center py-md hidden" data-i18n="snapshot.noIssues">No open issues</div>
+      </div>
+
+      <!-- Environment -->
+      <div class="card">
+        <h3 class="card-title" data-i18n="snapshot.environment">Environment</h3>
+        <div id="env-grid" class="key-value-grid"></div>
+      </div>
     </div>
   </div>
 </div>

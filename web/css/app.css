@@ -1371,10 +1371,30 @@ select.form-control {
    15. Snapshot Page
    ========================================================================== */
 
-.grid-list {
+.snapshot-two-col {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: var(--spacing-md);
+  align-items: start;
+}
+
+.snapshot-right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.snapshot-projects-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .snapshot-two-col {
+    grid-template-columns: 1fr;
+  }
 }
 
 .project-card {
