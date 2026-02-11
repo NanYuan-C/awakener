@@ -157,14 +157,22 @@
       }
     }
 
-    // 2. Extract formal output: lines that do NOT start with [Thinking]
+    // 2. Extract formal output: everything AFTER the last [Thinking] line.
+    //    The final output (structured summary) is always at the end,
+    //    following the last thinking block.
+    var lastThinkingIdx = -1;
+    for (var j = lines.length - 1; j >= 0; j--) {
+      if (/\[Thinking\]/.test(lines[j])) {
+        lastThinkingIdx = j;
+        break;
+      }
+    }
+
     var formalLines = [];
-    for (var j = 0; j < lines.length; j++) {
-      var trimmed = lines[j].trim();
-      // Skip lines containing [Thinking] tag (with or without timestamp prefix)
-      if (trimmed === '' && formalLines.length === 0) continue; // skip leading blanks
-      if (/\[Thinking\]/.test(lines[j])) continue;
-      formalLines.push(lines[j]);
+    for (var k = lastThinkingIdx + 1; k < lines.length; k++) {
+      // Skip leading empty lines
+      if (lines[k].trim() === '' && formalLines.length === 0) continue;
+      formalLines.push(lines[k]);
     }
 
     if (formalLines.length > 0) {
