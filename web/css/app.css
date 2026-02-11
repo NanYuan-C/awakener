@@ -655,20 +655,23 @@ select.form-control {
 .modal {
   background: var(--color-surface);
   border-radius: var(--radius-lg);
-  padding: var(--spacing-lg);
   width: 90%;
   max-width: 560px;
   max-height: 90vh;
-  overflow-y: auto;
   box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .modal-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: var(--spacing-md);
   gap: var(--spacing-sm);
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
 }
 
 .modal-header h3 {
@@ -696,13 +699,34 @@ select.form-control {
   flex-shrink: 0;
 }
 
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-lg);
+  min-height: 0;
+}
+
 .modal-footer {
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
   gap: var(--spacing-sm);
-  margin-top: var(--spacing-lg);
-  padding-top: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
   border-top: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.modal-footer .btn-icon {
+  font-size: 1.5rem;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  transition: all var(--transition-fast);
+}
+
+.modal-footer .btn-icon:hover {
+  background: var(--color-bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  color: var(--color-danger);
 }
 
 @keyframes fade-in {
