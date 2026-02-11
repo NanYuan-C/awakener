@@ -375,6 +375,7 @@ def run_round(
     api_key: str | None = None,
     normal_limit: int = 20,
     logger=None,
+    tool_callback: callable | None = None,
 ) -> RoundResult:
     """
     Execute one activation round: LLM <-> tool loop with streaming.
@@ -399,6 +400,8 @@ def run_round(
         logger:         Logger callback object (must have info, loading,
                         tool_call, tool_result, thought_chunk,
                         thought_done methods).
+        tool_callback:  Optional callback called after each tool execution
+                        with the current tool count: tool_callback(count).
 
     Returns:
         RoundResult with tools_used, summary, and error.
@@ -510,6 +513,8 @@ def run_round(
                         "or use shell_execute with 'cat << EOF > file')"
                     )
                     total_tool_calls += 1
+                    if tool_callback:
+                        tool_callback(total_tool_calls)
                     hint = _budget_hint(total_tool_calls, normal_limit)
                     messages.append({
                         "role": "tool",
@@ -530,6 +535,8 @@ def run_round(
                     "Please stop calling tools and let the round end.]"
                 )
                 total_tool_calls += 1
+                if tool_callback:
+                    tool_callback(total_tool_calls)
                 messages.append({
                     "role": "tool",
                     "tool_call_id": call_id,
@@ -544,6 +551,8 @@ def run_round(
                 logger.loading(f"[TOOL] Executing {func_name}")
             result = tool_executor.execute(func_name, args)
             total_tool_calls += 1
+            if tool_callback:
+                tool_callback(total_tool_calls)
 
             # Prepend budget hint
             hint = _budget_hint(total_tool_calls, normal_limit)

@@ -27,8 +27,8 @@
 
   // -- State ----------------------------------------------------------------
   let ws = null;
-  let totalToolCalls = 0;
-  let startTime = null;
+  let roundStartTime = null;   // ISO timestamp of current round start (from backend)
+  let roundToolsUsed = 0;      // Tools used in current round (from backend)
   let uptimeTimer = null;
   let liveThoughtEl = null;    // Currently streaming thought element
   let liveThoughtText = '';    // Accumulated streaming thought content
@@ -119,11 +119,21 @@
         break;
 
       case 'round':
+        // Round start event with round_start_time and round_tools_used
+        if (msg.round !== undefined && msg.round_start_time !== undefined) {
+          roundStartTime = msg.round_start_time;
+          roundToolsUsed = msg.round_tools_used || 0;
+          statRound.textContent = msg.round;
+          statTools.textContent = roundToolsUsed;
+          // Start uptime timer
+          if (!uptimeTimer) {
+            uptimeTimer = setInterval(updateUptime, 1000);
+          }
+          updateUptime();
+        }
+        // Legacy event handling (from old message format)
         if (d.event === 'started') {
           appendLog('═══ Round ' + d.step + ' ═══', 'round');
-          statRound.textContent = d.step || '-';
-          // Belt-and-suspenders: also update status from round event
-          updateStatus({status: 'running', round: d.step});
         } else if (d.event === 'completed') {
           appendLog(
             '[DONE] Round ' + d.step + ' | Tools: ' + (d.tools_used || 0) +
@@ -133,13 +143,20 @@
         }
         break;
 
+      case 'tools':
+        // Real-time tool count update from backend
+        if (msg.round_tools_used !== undefined) {
+          roundToolsUsed = msg.round_tools_used;
+          statTools.textContent = roundToolsUsed;
+        }
+        break;
+
       case 'tool_call':
         var argsStr = '';
         try { argsStr = JSON.stringify(d.args || {}); } catch(e) { argsStr = '{}'; }
         if (argsStr.length > 200) argsStr = argsStr.substring(0, 200) + '...';
         appendLog('[TOOL] ' + d.name + '(' + argsStr + ')', 'tool');
-        totalToolCalls++;
-        statTools.textContent = totalToolCalls;
+        // Note: tool count now updated via 'tools' message from backend
         break;
 
       case 'tool_result':
@@ -236,6 +253,19 @@
       statRound.textContent = round;
     }
 
+    // Update round timing and tool count (from status API on page load/refresh)
+    if (data.round_start_time) {
+      roundStartTime = data.round_start_time;
+      if (!uptimeTimer && (status === 'running' || status === 'waiting')) {
+        uptimeTimer = setInterval(updateUptime, 1000);
+      }
+      updateUptime();
+    }
+    if (data.round_tools_used !== undefined) {
+      roundToolsUsed = data.round_tools_used;
+      statTools.textContent = roundToolsUsed;
+    }
+
     // Button states based on current status
     const isRunning = (status === 'running' || status === 'waiting');
     const isStopping = (status === 'stopping');
@@ -245,24 +275,29 @@
     // Stop button: disabled when idle, error, or already stopping
     btnStop.disabled = !isRunning;
 
-    // Uptime tracking
-    const isActive = isRunning || isStopping;
-    if (isActive && !startTime) {
-      startTime = Date.now();
-      uptimeTimer = setInterval(updateUptime, 1000);
-    } else if (!isActive) {
-      startTime = null;
-      if (uptimeTimer) clearInterval(uptimeTimer);
+    // Uptime timer: stop when idle/error/stopped
+    if (status === 'idle' || status === 'error') {
+      roundStartTime = null;
+      roundToolsUsed = 0;
+      if (uptimeTimer) {
+        clearInterval(uptimeTimer);
+        uptimeTimer = null;
+      }
       statUptime.textContent = '-';
+      statTools.textContent = '0';
     }
   }
 
   /**
-   * Update the uptime display (HH:MM:SS).
+   * Update the uptime display (HH:MM:SS) based on roundStartTime.
    */
   function updateUptime() {
-    if (!startTime) return;
-    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    if (!roundStartTime) {
+      statUptime.textContent = '-';
+      return;
+    }
+    const start = new Date(roundStartTime).getTime();
+    const elapsed = Math.floor((Date.now() - start) / 1000);
     const h = Math.floor(elapsed / 3600);
     const m = Math.floor((elapsed % 3600) / 60);
     const s = elapsed % 60;

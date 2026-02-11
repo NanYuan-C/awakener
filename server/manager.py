@@ -44,14 +44,16 @@ class AgentManager:
     responsive, and communicates state changes through WebSocket.
 
     Attributes:
-        ws:              WebSocket manager for broadcasting to frontend.
-        project_dir:     Awakener project root directory.
-        state:           Current state string.
-        current_round:   Current activation round number.
-        start_time:      When the activator was last started.
-        total_rounds:    Total rounds completed in this session.
+        ws:                 WebSocket manager for broadcasting to frontend.
+        project_dir:        Awakener project root directory.
+        state:              Current state string.
+        current_round:      Current activation round number.
+        start_time:         When the activator was last started.
+        total_rounds:       Total rounds completed in this session.
         last_round_summary: Summary text from the last completed round.
         last_round_tools:   Number of tools used in the last round.
+        round_start_time:   ISO timestamp when current round started.
+        round_tools_used:   Tools used in current round (real-time counter).
     """
 
     def __init__(self, ws_manager: WebSocketManager, project_dir: str = ""):
@@ -70,6 +72,10 @@ class AgentManager:
         self.total_rounds: int = 0
         self.last_round_summary: str = ""
         self.last_round_tools: int = 0
+        
+        # Current round tracking (for real-time display)
+        self.round_start_time: str | None = None  # ISO timestamp of current round start
+        self.round_tools_used: int = 0  # Tools used in current round
 
         # Thread management
         self._thread: threading.Thread | None = None
@@ -96,6 +102,8 @@ class AgentManager:
             "total_rounds": self.total_rounds,
             "last_round_summary": self.last_round_summary,
             "last_round_tools": self.last_round_tools,
+            "round_start_time": self.round_start_time,
+            "round_tools_used": self.round_tools_used,
             "ws_clients": self.ws.client_count,
         }
 
@@ -107,7 +115,8 @@ class AgentManager:
         that the web API can read. No async calls here.
 
         Args:
-            update: Dict with keys like 'state', 'round', 'tools', 'summary'.
+            update: Dict with keys like 'state', 'round', 'tools', 'summary',
+                    'round_start_time', 'round_tools_used'.
         """
         if "state" in update:
             self.state = update["state"]
@@ -118,6 +127,10 @@ class AgentManager:
             self.total_rounds += 1
         if "summary" in update:
             self.last_round_summary = update["summary"]
+        if "round_start_time" in update:
+            self.round_start_time = update["round_start_time"]
+        if "round_tools_used" in update:
+            self.round_tools_used = update["round_tools_used"]
 
     def _run_activator(self, config: dict, event_loop) -> None:
         """

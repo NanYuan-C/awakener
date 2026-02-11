@@ -361,6 +361,7 @@ def run_activation_loop(
     # -- Main loop --
     while not stop_event.is_set():
         round_start_time = time.time()
+        round_start_iso = datetime.now(timezone.utc).isoformat()
         logger.round_start(round_num)
 
         # Reload agent settings each round so web-console changes take
@@ -377,8 +378,29 @@ def run_activation_loop(
         except Exception:
             pass  # Keep previous values if reload fails
 
+        # Notify manager: round started, reset counters
         if state_callback:
-            state_callback({"state": "running", "round": round_num})
+            state_callback({
+                "state": "running",
+                "round": round_num,
+                "round_start_time": round_start_iso,
+                "round_tools_used": 0,
+            })
+        
+        # Broadcast round start to frontend via WebSocket
+        if ws_manager and event_loop:
+            try:
+                asyncio.run_coroutine_threadsafe(
+                    ws_manager.broadcast({
+                        "type": "round",
+                        "round": round_num,
+                        "round_start_time": round_start_iso,
+                        "round_tools_used": 0,
+                    }),
+                    event_loop,
+                )
+            except Exception:
+                pass  # Event loop may be closed
 
         # Build context messages (includes snapshot + skills + knowledge base)
         system_msg = build_system_message(
@@ -413,6 +435,24 @@ def run_activation_loop(
             skills_dir=skills_dir,
         )
 
+        # Define tool callback for real-time tool count updates
+        def on_tool_used(count: int):
+            """Called after each tool execution to broadcast count."""
+            if state_callback:
+                state_callback({"round_tools_used": count})
+            if ws_manager and event_loop:
+                try:
+                    asyncio.run_coroutine_threadsafe(
+                        ws_manager.broadcast({
+                            "type": "tools",
+                            "round": round_num,
+                            "round_tools_used": count,
+                        }),
+                        event_loop,
+                    )
+                except Exception:
+                    pass
+
         # Run one activation round
         result = run_round(
             messages=messages,
@@ -421,6 +461,7 @@ def run_activation_loop(
             api_key=api_key,
             normal_limit=max_tool_calls,
             logger=logger,
+            tool_callback=on_tool_used,
         )
 
         # Calculate duration
