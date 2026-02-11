@@ -64,8 +64,3 @@ agent:
   # Lower values save tokens; higher values give the agent more room.
   max_index_chars: 2000
 
-  # Disable all tool safety restrictions (project dir, PID, session, etc.).
-  # When true, the agent can access everything — protection relies solely
-  # on the self-awareness warning injected into the prompt.
-  # WARNING: Only enable this if you know what you are doing.
-  safety_bypass: false

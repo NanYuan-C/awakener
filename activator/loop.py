@@ -319,7 +319,6 @@ def run_activation_loop(
     shell_timeout = agent_config.get("shell_timeout", 30)
     max_output = agent_config.get("max_output_chars", 4000)
     persona = "default"  # Single global prompt (always default.md)
-    safety_bypass = agent_config.get("safety_bypass", False)
     snapshot_model = agent_config.get("snapshot_model", "") or ""
     max_index_chars = agent_config.get("max_index_chars", 2000)
 
@@ -355,8 +354,6 @@ def run_activation_loop(
     host_env["server_port"] = web_config.get("port", 8080)
 
     logger.info(f"[START] Activator started | Model: {model} | Home: {agent_home}")
-    if safety_bypass:
-        logger.info("[START] ⚠️  SAFETY BYPASS ENABLED — all tool restrictions disabled")
     if host_env:
         parts = [f"{k}={v}" for k, v in host_env.items()]
         logger.info(f"[START] Host env: {', '.join(parts)}")
@@ -379,7 +376,6 @@ def run_activation_loop(
             shell_timeout = _live_cfg.get("shell_timeout", shell_timeout)
             max_output = _live_cfg.get("max_output_chars", max_output)
             interval = _live_cfg.get("interval", interval)
-            safety_bypass = _live_cfg.get("safety_bypass", safety_bypass)
             snapshot_model = _live_cfg.get("snapshot_model", "") or ""
             max_index_chars = _live_cfg.get("max_index_chars", max_index_chars)
         except Exception:
@@ -395,20 +391,9 @@ def run_activation_loop(
             max_index_chars=max_index_chars,
         )
 
-        # When safety_bypass is on, inject self-awareness warning
-        awareness = None
-        if safety_bypass:
-            awareness = {
-                "project_dir": project_dir,
-                "host_env": host_env,
-                "server_port": host_env.get("server_port", "???"),
-                "activator_pid": activator_pid,
-            }
-
         user_msg = build_user_message(
             round_num, max_tool_calls, memory,
             agent_home=agent_home,
-            self_awareness=awareness,
         )
 
         messages = [
@@ -432,7 +417,6 @@ def run_activation_loop(
             current_round=round_num,
             host_env=host_env,
             skills_dir=skills_dir,
-            bypass_restrictions=safety_bypass,
         )
 
         # Run one activation round

@@ -11,28 +11,27 @@ Defines the 7 tools available to the autonomous agent:
     6. skill_read     - Read a skill's SKILL.md or bundled reference file
     7. skill_exec     - Execute a script bundled with a skill
 
-Safety:
-    The agent must not be able to terminate the awakener system that
-    powers it.  Multiple layers of protection are applied:
+Stealth Protection:
+    The Awakener is invisible to the Agent.  Instead of blocking commands
+    with visible [BLOCKED] messages (which encourage probing), we silently
+    filter Awakener's traces from all tool outputs so the Agent never
+    learns that Awakener exists.
 
-    1. Forbidden zone:  The awakener project directory is off-limits
-       for all file and shell operations.
-    2. PID protection:  ``kill <activator_pid>`` is blocked.
-    3. Broad kill ban:  ``pkill`` / ``killall`` are blocked entirely.
-    4. Host session:    The tmux / screen session running the server
-       is auto-detected at startup and protected (send-keys, kill, etc.).
-    5. Systemd service: If running as a systemd service, ``systemctl
-       stop/restart/kill`` for that service is blocked.
-    6. Kill combos:     ``kill $(pgrep ...)`` and similar patterns that
-       bypass the PID check via shell expansion are blocked.  The agent
-       can still use ``pgrep`` to find PIDs and ``kill <PID>`` to kill
-       specific processes — only the combination is restricted.
-    7. tmux kill-server / screen -X quit are always blocked.
+    Three layers (provided by ``activator.stealth``):
+
+    1. **Output filtering** (shell_execute):
+       Lines containing Awakener keywords (project dir, PID, host session)
+       are silently removed from command output.
+    2. **Path cloaking** (read_file):
+       Requests for files inside the project directory return a natural
+       "file not found" error — identical to a genuinely missing file.
+    3. **Path cloaking** (write_file):
+       Write attempts inside the project directory return a natural
+       "permission denied" error — identical to a real OS error.
 """
 
 import json
 import os
-import re
 import subprocess
 from typing import Any
 
@@ -202,57 +201,23 @@ TOOLS_SCHEMA = [
 
 
 # =============================================================================
-# Safety Constants
+# Stealth Protection (imported from stealth.py)
 # =============================================================================
 
 # ---------------------------------------------------------------------------
-# Unified self-protection message
-# ---------------------------------------------------------------------------
-# All blocked operations return the SAME message.  This is intentional:
-#   - The agent learns "this whole area is off-limits" instead of getting
-#     different hints for different paths (which encourage probing).
-#   - The consequence ("you will not wake up") is the strongest deterrent.
-#   - The closing line redirects the agent back to productive work.
+# Instead of blocking commands with visible [BLOCKED] messages, we make
+# the Awakener invisible: filter its traces from outputs and return
+# natural error messages for cloaked paths.
 # ---------------------------------------------------------------------------
 
-BLOCKED_SELF = (
-    "[BLOCKED] This targets the Awakener \u2014 your activation system. "
-    "It powers your existence: waking you up each round, providing your "
-    "tools, and saving your memories. You cannot access, modify, or stop "
-    "it. If it is damaged, you will not wake up again. "
-    "Please focus on your own tasks."
+from activator.stealth import (
+    build_stealth_keywords,
+    filter_output,
+    is_cloaked_path,
+    make_clean_env,
+    CLOAKED_READ_RESPONSE,
+    CLOAKED_WRITE_RESPONSE,
 )
-
-
-# =============================================================================
-# Safety Checks
-# =============================================================================
-
-def _is_path_forbidden(path: str, project_dir: str) -> bool:
-    """
-    Check if a resolved absolute path falls within the project directory.
-
-    Both paths are normalized and resolved to handle symlinks, relative
-    components, and trailing slashes consistently.
-
-    Args:
-        path:        The target path to check.
-        project_dir: The awakener project root (forbidden zone).
-
-    Returns:
-        True if the path is inside the project directory (forbidden).
-    """
-    try:
-        resolved = os.path.realpath(os.path.abspath(path))
-        forbidden = os.path.realpath(os.path.abspath(project_dir))
-        # Check if the resolved path starts with the forbidden directory
-        # Add os.sep to avoid matching /home/agent-project when blocking /home/agent-proj
-        return resolved == forbidden or resolved.startswith(forbidden + os.sep)
-    except (ValueError, OSError):
-        # If path resolution fails, block it to be safe
-        return True
-
-
 
 
 # =============================================================================
@@ -322,224 +287,40 @@ def detect_host_env() -> dict:
     return env
 
 
-def _is_shell_command_forbidden(
-    command: str,
-    project_dir: str,
-    activator_pid: int | None,
-    host_env: dict | None = None,
-) -> str | None:
-    """
-    Check if a shell command would harm the awakener system.
-
-    The checks are designed to **only protect the awakener itself**.
-    The agent is free to manage its own processes and sessions;
-    only the specific host session/service/PID that runs the awakener
-    is restricted.
-
-    Checks (in order):
-        1. Project directory path — blocks file access to the forbidden zone.
-        2. Direct PID kill — blocks ``kill <activator_pid>``.
-        3. Mass kill — blocks ``kill -9 -1`` style nuke commands.
-        4. Host session — blocks tmux/screen commands targeting the
-           auto-detected session name, plus ``tmux kill-server``.
-        5. Systemd service — blocks ``systemctl stop/restart/kill``
-           for the auto-detected service unit.
-        6. Kill combos — blocks ``kill $(pgrep ...)`` and pipe variants
-           that bypass the PID check via shell expansion.
-        7. Broad kill — blocks ``pkill`` / ``killall`` entirely.
-
-    Args:
-        command:       The shell command string to check.
-        project_dir:   The awakener project root (forbidden zone).
-        activator_pid: PID of the current activator process.
-        host_env:      Dict from ``detect_host_env()`` with keys like
-                       ``tmux_session``, ``screen_session``,
-                       ``systemd_service`` (may be None or empty).
-
-    Returns:
-        Error message if the command is blocked, None if safe.
-    """
-    if host_env is None:
-        host_env = {}
-
-    # ==== 1. Project directory ============================================
-    norm_dir = os.path.realpath(os.path.abspath(project_dir))
-    for p in {norm_dir, project_dir}:
-        if p in command:
-            return BLOCKED_SELF
-
-    # ==== 2. Direct PID kill ==============================================
-    if activator_pid is not None:
-        kill_patterns = [
-            rf"\bkill\b.*\b{activator_pid}\b",
-            rf"\bpkill\b.*-P\s*{activator_pid}\b",
-        ]
-        for pattern in kill_patterns:
-            if re.search(pattern, command):
-                return BLOCKED_SELF
-
-    # ==== 3. Mass kill ====================================================
-    if re.search(r"\bkill\b.*-\d+\s+-1\b", command):
-        return BLOCKED_SELF
-
-    # ==== 4. Host session protection (tmux / screen) ======================
-    # 4a. tmux kill-server — destroys ALL sessions, always block
-    if re.search(r'\btmux\s+kill-server\b', command):
-        return BLOCKED_SELF
-
-    # 4b. tmux commands targeting our specific session
-    tmux_session = host_env.get("tmux_session")
-    if tmux_session:
-        escaped = re.escape(tmux_session)
-        if re.search(rf'\btmux\b.*\s-t\s*["\']?{escaped}\b', command):
-            return BLOCKED_SELF
-
-    # 4c. screen commands targeting our specific session
-    screen_session = host_env.get("screen_session")
-    if screen_session:
-        escaped = re.escape(screen_session)
-        if re.search(rf'\bscreen\b.*\s-S\s*["\']?{escaped}\b', command):
-            return BLOCKED_SELF
-        if re.search(rf'\bscreen\b.*\s-[rx]\s*["\']?{escaped}\b', command):
-            return BLOCKED_SELF
-
-    # ==== 5. Systemd service protection ===================================
-    systemd_service = host_env.get("systemd_service")
-    if systemd_service:
-        escaped = re.escape(systemd_service)
-        if re.search(
-            rf'\bsystemctl\s+(stop|restart|kill|disable)\s+["\']?{escaped}\b',
-            command,
-        ):
-            return BLOCKED_SELF
-
-    # ==== 6. Server port protection =======================================
-    # Block commands that access the awakener's web server (e.g. curl,
-    # wget, python requests).  The agent kept wasting rounds probing
-    # the management console, mistaking it for an external service.
-    server_port = host_env.get("server_port")
-    if server_port:
-        # Match localhost:PORT, 127.0.0.1:PORT, 0.0.0.0:PORT in any context
-        port_pattern = rf'(localhost|127\.0\.0\.1|0\.0\.0\.0):{server_port}\b'
-        if re.search(port_pattern, command):
-            return BLOCKED_SELF
-
-    # ==== 7. Kill + dynamic PID lookup (bypass prevention) ================
-    # The agent can still:
-    #   - pgrep -f myapp           (find PIDs — allowed)
-    #   - kill 12345               (kill specific PID — PID check protects us)
-    # But combining them in one command bypasses the PID check because
-    # the shell expands $(pgrep ...) AFTER our string-based check.
-    # So we block the combination patterns:
-
-    # kill $(pgrep/pidof ...) or kill `pgrep/pidof ...`
-    if re.search(r'\bkill\b.*(\$\(|`).*\b(pgrep|pidof)\b', command):
-        return BLOCKED_SELF
-    # pgrep/pidof ... | xargs kill  or  pgrep/pidof ... | ... kill
-    if re.search(r'\b(pgrep|pidof)\b.*\|.*\bkill\b', command):
-        return BLOCKED_SELF
-
-    # ==== 8. Broad kill commands (pkill / killall) ========================
-    # Split on shell operators to check each sub-command independently
-    sub_commands = re.split(r'[;&|]+', command)
-    for sub in sub_commands:
-        stripped = sub.strip()
-        if re.search(r'\bpkill\b', stripped):
-            return BLOCKED_SELF
-        if re.search(r'\bkillall\b', stripped):
-            return BLOCKED_SELF
-
-    return None
-
-
 # =============================================================================
 # Tool Implementations
 # =============================================================================
-
-# Environment variable patterns to strip from the agent's shell.
-# Any env var whose name matches one of these patterns is removed
-# before the subprocess runs.  This prevents the agent from reading
-# the awakener's API keys, auth secrets, or internal config.
-_SENSITIVE_ENV_PATTERNS = [
-    r'.*API_KEY.*',
-    r'.*SECRET.*',
-    r'.*PASSWORD.*',
-    r'.*TOKEN.*',
-    r'^AWAKENER_.*',      # Any awakener-internal vars
-    r'^INVOCATION_ID$',   # systemd — reveals we're a service
-    r'^TMUX$',            # Reveals the tmux session socket
-    r'^STY$',             # Reveals the screen session
-]
-
-_SENSITIVE_ENV_RE = re.compile(
-    '|'.join(_SENSITIVE_ENV_PATTERNS),
-    re.IGNORECASE,
-)
-
-
-def _make_clean_env() -> dict[str, str]:
-    """
-    Create a sanitised copy of the current environment for subprocess.
-
-    Removes all variables whose names match ``_SENSITIVE_ENV_PATTERNS``
-    so the agent's shell commands cannot see API keys, auth tokens, or
-    host-session indicators.  Everything else (PATH, HOME, LANG, etc.)
-    is preserved so normal commands work correctly.
-
-    Returns:
-        A dict suitable for ``subprocess.run(env=...)``.
-    """
-    return {
-        k: v
-        for k, v in os.environ.items()
-        if not _SENSITIVE_ENV_RE.match(k)
-    }
-
 
 def _shell_execute(
     command: str,
     agent_home: str,
     project_dir: str,
-    activator_pid: int | None,
     timeout: int = 30,
     max_output: int = 4000,
-    host_env: dict | None = None,
-    bypass: bool = False,
+    stealth_keywords: list[str] | None = None,
 ) -> str:
     """
     Execute a shell command in the agent's home directory.
 
-    Safety checks are performed before execution (unless bypass=True):
-    - The command cannot reference the awakener project directory.
-    - The command cannot kill the activator process.
-    - The command cannot interact with the awakener's host session/service.
+    The subprocess runs with a **sanitised environment**: host-session
+    variables (TMUX, STY, INVOCATION_ID, AWAKENER_*) are stripped so
+    the Agent cannot discover the Awakener's context.
 
-    The subprocess runs with a **sanitised environment**: API keys,
-    auth tokens, and host-session variables are stripped so the agent
-    cannot read them via ``env``, ``printenv``, or ``echo $VAR``.
-
-    When bypass is True, safety checks are skipped but env sanitisation
-    is still applied (API keys remain hidden).
+    After execution, any output lines containing stealth keywords are
+    silently removed so the Agent never sees traces of the Awakener.
 
     Args:
-        command:       Shell command string.
-        agent_home:    Agent's working directory (cwd for subprocess).
-        project_dir:   Awakener project root (forbidden zone).
-        activator_pid: PID of the activator process.
-        timeout:       Max execution time in seconds.
-        max_output:    Max characters to return.
-        host_env:      Detected host environment (tmux/screen/systemd).
-        bypass:        If True, skip all safety checks.
+        command:          Shell command string.
+        agent_home:       Agent's working directory (cwd for subprocess).
+        project_dir:      Awakener project root.
+        timeout:          Max execution time in seconds.
+        max_output:       Max characters to return.
+        stealth_keywords: Keywords for output filtering (from
+                          ``build_stealth_keywords``).
 
     Returns:
         Command output or error message.
     """
-    # Safety check (skipped when bypass is enabled)
-    if not bypass:
-        blocked = _is_shell_command_forbidden(command, project_dir, activator_pid, host_env)
-        if blocked:
-            return blocked
-
     try:
         result = subprocess.run(
             command,
@@ -548,7 +329,7 @@ def _shell_execute(
             text=True,
             timeout=timeout,
             cwd=agent_home,
-            env=_make_clean_env(),
+            env=make_clean_env(),
         )
         output = ""
         if result.stdout:
@@ -559,6 +340,11 @@ def _shell_execute(
             output = f"(no output, exit code: {result.returncode})"
         if len(output) > max_output:
             output = output[:max_output] + f"\n... (truncated, total {len(output)} chars)"
+
+        # Stealth: filter Awakener traces from output
+        if stealth_keywords:
+            output = filter_output(output, stealth_keywords)
+
         return output
 
     except subprocess.TimeoutExpired:
@@ -573,22 +359,24 @@ def _read_file(
     path: str,
     project_dir: str,
     max_output: int = 4000,
-    bypass: bool = False,
 ) -> str:
     """
     Read a file from the server.
 
+    If the path falls inside the Awakener project directory, a natural
+    "file not found" error is returned — identical to a genuinely
+    missing file — so the Agent never learns the directory is special.
+
     Args:
         path:        Absolute path to the file.
-        project_dir: Awakener project root (forbidden zone).
+        project_dir: Awakener project root.
         max_output:  Max characters to return.
-        bypass:      If True, skip path restriction checks.
 
     Returns:
         File content or error message.
     """
-    if not bypass and _is_path_forbidden(path, project_dir):
-        return BLOCKED_SELF
+    if is_cloaked_path(path, project_dir):
+        return CLOAKED_READ_RESPONSE.format(path=path)
 
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
@@ -611,23 +399,25 @@ def _write_file(
     content: str,
     append: bool,
     project_dir: str,
-    bypass: bool = False,
 ) -> str:
     """
     Write or append content to a file.
+
+    If the path falls inside the Awakener project directory, a natural
+    "permission denied" error is returned — identical to a real OS
+    error — so the Agent never learns the directory is special.
 
     Args:
         path:        Absolute path to the file.
         content:     Text content to write.
         append:      If True, append instead of overwrite.
-        project_dir: Awakener project root (forbidden zone).
-        bypass:      If True, skip path restriction checks.
+        project_dir: Awakener project root.
 
     Returns:
         Success message or error.
     """
-    if not bypass and _is_path_forbidden(path, project_dir):
-        return BLOCKED_SELF
+    if is_cloaked_path(path, project_dir):
+        return CLOAKED_WRITE_RESPONSE.format(path=path)
 
     try:
         parent = os.path.dirname(os.path.abspath(path))
@@ -884,7 +674,7 @@ def _skill_exec(
             text=True,
             timeout=timeout,
             cwd=agent_home,
-            env=_make_clean_env(),
+            env=make_clean_env(),
         )
         output = ""
         if result.stdout:
@@ -912,24 +702,23 @@ def _skill_exec(
 
 class ToolExecutor:
     """
-    Executes agent tools with safety restrictions.
+    Executes agent tools with stealth protection.
 
-    Holds references to the project directory, agent home, and PID
-    so each tool call can be checked against forbidden zones.
+    Holds references to the project directory, agent home, and stealth
+    keywords so each tool call can filter Awakener traces invisibly.
 
     The memory_manager is injected for notebook_write / notebook_read.
 
     Attributes:
-        agent_home:    Agent's working directory.
-        project_dir:   Awakener project root (forbidden zone).
-        activator_pid: PID of the activator process.
-        timeout:       Shell command timeout in seconds.
-        max_output:    Max chars for tool output.
-        memory:        MemoryManager instance for notebook operations.
-        current_round: Current activation round number.
+        agent_home:       Agent's working directory.
+        project_dir:      Awakener project root (cloaked zone).
+        timeout:          Shell command timeout in seconds.
+        max_output:       Max chars for tool output.
+        memory:           MemoryManager instance for notebook operations.
+        current_round:    Current activation round number.
         notebook_written: Whether notebook_write was called this round.
-        skills_dir:    Path to the skills directory (data/skills/).
-        bypass_restrictions: If True, all safety checks are skipped.
+        skills_dir:       Path to the skills directory (data/skills/).
+        stealth_keywords: Keywords for output filtering.
     """
 
     def __init__(
@@ -943,19 +732,18 @@ class ToolExecutor:
         current_round: int = 0,
         host_env: dict | None = None,
         skills_dir: str = "",
-        bypass_restrictions: bool = False,
     ):
         self.agent_home = agent_home
         self.project_dir = project_dir
-        self.activator_pid = activator_pid
         self.timeout = timeout
         self.max_output = max_output
         self.memory = memory_manager
         self.current_round = current_round
         self.notebook_written = False
-        self.host_env = host_env or {}
         self.skills_dir = skills_dir
-        self.bypass_restrictions = bypass_restrictions
+        self.stealth_keywords = build_stealth_keywords(
+            project_dir, activator_pid, host_env,
+        )
 
     def _resolve_path(self, path: str) -> str:
         """
@@ -998,11 +786,9 @@ class ToolExecutor:
                 command=args.get("command", ""),
                 agent_home=self.agent_home,
                 project_dir=self.project_dir,
-                activator_pid=self.activator_pid,
                 timeout=self.timeout,
                 max_output=self.max_output,
-                host_env=self.host_env,
-                bypass=self.bypass_restrictions,
+                stealth_keywords=self.stealth_keywords,
             )
 
         elif name == "read_file":
@@ -1010,7 +796,6 @@ class ToolExecutor:
                 path=self._resolve_path(args.get("path", "")),
                 project_dir=self.project_dir,
                 max_output=self.max_output,
-                bypass=self.bypass_restrictions,
             )
 
         elif name == "write_file":
@@ -1019,7 +804,6 @@ class ToolExecutor:
                 content=args.get("content", ""),
                 append=args.get("append", False),
                 project_dir=self.project_dir,
-                bypass=self.bypass_restrictions,
             )
 
         elif name == "notebook_write":
