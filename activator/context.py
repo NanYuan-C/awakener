@@ -28,12 +28,12 @@ from activator.snapshot import load_snapshot, render_snapshot_markdown, _extract
 # Tool Documentation (appended to system message)
 # =============================================================================
 
-TOOL_DOCS = """
+TOOL_DOCS_BASE = """
 ---
 
 ## Available Tools
 
-You have 6 tools at your disposal:
+You have {tool_count} tools at your disposal:
 
 ### 1. shell_execute(command)
 Execute a shell command on this server. Your working directory is your home folder.
@@ -57,7 +57,9 @@ rewriting the entire file. Usage patterns:
 - **Delete**: set new_str to an empty string.
 old_str must match exactly one location. Include enough surrounding context
 (a few lines) to ensure uniqueness.
+""".strip()
 
+TOOL_DOCS_SKILLS = """
 ### 5. skill_read(name, file?)
 Read a skill's instruction file or bundled reference document. Your installed
 skills are listed below. Call `skill_read("skill-name")` to get the full
@@ -67,7 +69,9 @@ files, e.g. `skill_read("db-optimizer", "references/mysql-tuning.md")`.
 ### 6. skill_exec(name, script, args?)
 Execute a script bundled with a skill. The script must be inside the skill's
 `scripts/` directory. Pass optional arguments as a string.
+""".strip()
 
+TOOL_DOCS_RULES = """
 ## Important Rules
 
 - Plan your work wisely. You have a limited tool budget per round.
@@ -106,15 +110,19 @@ def build_system_message(
     persona_name: str,
     skills_dir: str = "",
     data_dir: str = "",
-) -> str:
+) -> tuple[str, bool]:
     """
     Build the full system message.
 
     Assembled in order:
         1. Persona prompt (who you are)
         2. Tool documentation (what you can do)
-        3. Installed skills index (expert knowledge)
+        3. Installed skills index (expert knowledge, only if skills exist)
         4. System snapshot (asset inventory)
+
+    When no skills are installed, the skill-related tool documentation
+    and skill index are omitted entirely so the Agent is not tempted
+    to explore the filesystem looking for skills.
 
     Args:
         project_dir:     Awakener project root.
@@ -123,31 +131,44 @@ def build_system_message(
         data_dir:        Path to ``data/`` directory (for snapshot).
 
     Returns:
-        Complete system message string.
+        Tuple of (system_message_string, has_skills_bool).
     """
     persona = load_persona(project_dir, persona_name)
-    parts = [persona, "", TOOL_DOCS]
 
-    # Append skills index (only enabled skills)
+    # Check for installed skills
+    has_skills = False
+    enabled_skills = []
     if skills_dir:
         skills = scan_skills(skills_dir)
-        enabled = [s for s in skills if s.get("enabled")]
-        if enabled:
-            parts.append("")
-            parts.append("## Installed Skills")
-            parts.append("")
-            parts.append(
-                "You have expert skills installed. **Before starting any "
-                "building or coding work, read the relevant skills first** "
-                "using `skill_read(name)`. They contain critical guidelines "
-                "and best practices you must follow."
-            )
-            parts.append("")
-            parts.append("| Skill | Description |")
-            parts.append("|-------|-------------|")
-            for s in enabled:
-                desc = s.get("description", "") or s.get("title", s["name"])
-                parts.append(f"| {s['name']} | {desc} |")
+        enabled_skills = [s for s in skills if s.get("enabled")]
+        has_skills = len(enabled_skills) > 0
+
+    # Build tool docs — include skill tools only if skills are installed
+    tool_count = 6 if has_skills else 4
+    tool_docs = TOOL_DOCS_BASE.format(tool_count=tool_count)
+    if has_skills:
+        tool_docs += "\n\n" + TOOL_DOCS_SKILLS
+    tool_docs += "\n\n" + TOOL_DOCS_RULES
+
+    parts = [persona, "", tool_docs]
+
+    # Append skills index (only if skills exist)
+    if enabled_skills:
+        parts.append("")
+        parts.append("## Installed Skills")
+        parts.append("")
+        parts.append(
+            "You have expert skills installed. **Before starting any "
+            "building or coding work, read the relevant skills first** "
+            "using `skill_read(name)`. They contain critical guidelines "
+            "and best practices you must follow."
+        )
+        parts.append("")
+        parts.append("| Skill | Description |")
+        parts.append("|-------|-------------|")
+        for s in enabled_skills:
+            desc = s.get("description", "") or s.get("title", s["name"])
+            parts.append(f"| {s['name']} | {desc} |")
 
     # Append system snapshot (asset inventory)
     if data_dir:
@@ -157,7 +178,7 @@ def build_system_message(
             parts.append("")
             parts.append(snapshot_md)
 
-    return "\n".join(parts)
+    return "\n".join(parts), has_skills
 
 
 def build_context_messages(

@@ -34,7 +34,7 @@ from datetime import datetime
 from typing import Callable
 
 import litellm
-from activator.tools import ToolExecutor, TOOLS_SCHEMA
+from activator.tools import ToolExecutor, TOOLS_SCHEMA, get_tools_schema
 
 
 # =============================================================================
@@ -375,6 +375,7 @@ def run_round(
     model: str,
     api_key: str | None = None,
     normal_limit: int = 20,
+    has_skills: bool = True,
     logger=None,
     tool_callback: Callable[[int], None] | None = None,
 ) -> RoundResult:
@@ -398,6 +399,8 @@ def run_round(
         model:          LiteLLM model identifier (e.g. "deepseek/deepseek-chat").
         api_key:        Optional API key override.
         normal_limit:   Normal tool budget per round.
+        has_skills:     Whether skills are installed.  When False,
+                        skill tools are excluded from the schema.
         logger:         Logger callback object (must have info, loading,
                         tool_call, tool_result, thought_chunk,
                         thought_done methods).
@@ -420,7 +423,7 @@ def run_round(
             response = litellm.completion(
                 model=model,
                 messages=messages,
-                tools=TOOLS_SCHEMA,
+                tools=get_tools_schema(has_skills),
                 tool_choice="auto",
                 api_key=api_key,
                 stream=True,

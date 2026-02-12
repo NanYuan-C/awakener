@@ -399,7 +399,7 @@ def run_activation_loop(
                 pass  # Event loop may be closed
 
         # Build context messages (includes snapshot + skills)
-        system_msg = build_system_message(
+        system_msg, has_skills = build_system_message(
             project_dir, persona, skills_dir, data_dir,
         )
 
@@ -455,6 +455,7 @@ def run_activation_loop(
             model=model,
             api_key=api_key,
             normal_limit=max_tool_calls,
+            has_skills=has_skills,
             logger=logger,
             tool_callback=on_tool_used,
         )

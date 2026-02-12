@@ -7,29 +7,41 @@ Instead of blocking commands and returning [BLOCKED] messages (which
 encourage probing), this module silently filters Awakener's traces
 from all tool outputs.  The Agent never learns that Awakener exists.
 
-Three layers:
-1. **Output filtering** (shell_execute):
-   Remove lines containing Awakener keywords from command output.
-2. **Path cloaking** (read_file):
-   If the Agent tries to read a file inside the project directory,
-   return "file not found" — identical to a genuinely missing file.
-3. **Path cloaking** (write_file):
-   If the Agent tries to write inside the project directory,
-   return "permission denied" — identical to a real OS error.
+Five layers of protection:
+
+1. **Path cloaking** (read_file / write_file / edit_file):
+   If the Agent tries to access a file inside the project directory,
+   return natural OS errors ("file not found" / "permission denied").
+
+2. **Command path interception** (shell_execute — Layer 1):
+   Before executing a shell command, extract absolute paths from it.
+   If any path resolves inside the project directory, return a natural
+   shell error without executing the command.
+
+3. **Contextual output filtering** (shell_execute — Layer 2):
+   After execution, combine each output line with the command's
+   directory paths.  If the joined path resolves inside the project
+   directory (e.g. ``ls /opt/`` showing ``awakener``), the line is
+   silently removed.  Uses the same ``is_cloaked_path()`` function
+   as Layer 1, so all tools share one consistent check.
+
+4. **Keyword output filtering** (shell_execute — Layer 3):
+   Remove output lines containing stealth keywords (project path,
+   PID, server port, host session names).
+
+5. **Environment sanitisation** (subprocess):
+   Strip host-session variables (TMUX, STY, INVOCATION_ID, AWAKENER_*)
+   from subprocess environments.  API keys are NOT stripped — the
+   Agent may need them for its own projects.
 
 The stealth keywords are built dynamically from the runtime config
 (project directory, server port, PID, host session names), so they
 stay accurate without hard-coding.
-
-Environment variables:
-   We keep _TMUX, _STY, _INVOCATION_ID and _AWAKENER_* stripped from
-   subprocess environments so the Agent cannot discover host session
-   or systemd context.  API keys are NOT stripped — the Agent may
-   need them for its own projects.
 """
 
 import os
 import re
+import shlex
 
 
 # =============================================================================
@@ -177,6 +189,135 @@ CLOAKED_READ_RESPONSE = "(error: file not found: {path})"
 
 # Write returns same message as a real permission error
 CLOAKED_WRITE_RESPONSE = "(error: PermissionError: [Errno 13] Permission denied: '{path}')"
+
+# Shell returns same message as a real shell "no such file" error
+CLOAKED_SHELL_RESPONSE = "{path}: No such file or directory"
+
+
+# =============================================================================
+# Command Path Extraction (for shell_execute Layer 1)
+# =============================================================================
+
+def extract_command_paths(command: str) -> list[str]:
+    """
+    Extract absolute file paths from a shell command string.
+
+    Scans command tokens for strings that look like absolute paths
+    (starting with ``/``).  Used by shell_execute to detect references
+    to the project directory before the command is executed.
+
+    Handles quoting via ``shlex.split``, with a plain ``str.split``
+    fallback if the command has unmatched quotes.
+
+    Args:
+        command: The shell command string.
+
+    Returns:
+        List of absolute path strings found in the command.
+    """
+    try:
+        tokens = shlex.split(command)
+    except ValueError:
+        # Unmatched quotes or other parse errors — fall back to simple split
+        tokens = command.split()
+
+    paths = []
+    for token in tokens:
+        if token.startswith('/'):
+            # Strip trailing shell operators that may be glued to the path
+            # (e.g. "/opt/;" or "/opt/&&")
+            clean = token.rstrip(';,|&')
+            if clean:
+                paths.append(clean)
+    return paths
+
+
+# =============================================================================
+# Contextual Output Filter (for shell_execute Layer 2)
+# =============================================================================
+
+def filter_cloaked_output(
+    output: str,
+    command_paths: list[str],
+    project_dir: str,
+) -> str:
+    """
+    Contextual output filter for shell_execute.
+
+    For each output line, checks whether combining it with any of the
+    command's directory paths would form a path inside the project
+    directory.  If so, the line is silently removed.
+
+    Example: command ``ls /opt/`` produces output line ``awakener``.
+    ``os.path.join("/opt/", "awakener")`` = ``/opt/awakener`` which
+    matches the project directory → the line is hidden.
+
+    Uses ``is_cloaked_path()`` — the same function used by read_file
+    and write_file — so all tools share one consistent path check.
+
+    Args:
+        output:        Raw command output string.
+        command_paths: Absolute paths extracted from the command
+                       (from ``extract_command_paths``).
+        project_dir:   Awakener project root directory.
+
+    Returns:
+        Filtered output string.
+    """
+    if not output or not command_paths or not project_dir:
+        return output
+
+    filtered_lines = []
+    for line in output.splitlines():
+        if _line_exposes_cloaked(line, command_paths, project_dir):
+            continue  # silently drop this line
+        filtered_lines.append(line)
+
+    return "\n".join(filtered_lines)
+
+
+def _line_exposes_cloaked(
+    line: str,
+    dir_paths: list[str],
+    project_dir: str,
+) -> bool:
+    """
+    Check if an output line, combined with any command path, reveals
+    a path inside the project directory.
+
+    Tests both the full stripped line and the last whitespace-separated
+    token (to handle ``ls -la`` output where the filename is the last
+    field).
+
+    Skips candidates that start with ``/`` (absolute paths are already
+    handled by the keyword-based filter in Layer 3).
+
+    Args:
+        line:        A single line of command output.
+        dir_paths:   Directory paths extracted from the command.
+        project_dir: Awakener project root.
+
+    Returns:
+        True if this line should be hidden.
+    """
+    # Build candidate names from the output line
+    candidates = set()
+    stripped = line.strip()
+    if stripped:
+        candidates.add(stripped)
+    parts = line.split()
+    if parts:
+        candidates.add(parts[-1])  # last token (filename in ls -la)
+
+    for name in candidates:
+        # Skip empty, absolute paths, and common non-path tokens
+        if not name or name.startswith('/'):
+            continue
+        for dir_path in dir_paths:
+            joined = os.path.join(dir_path, name)
+            if is_cloaked_path(joined, project_dir):
+                return True
+    return False
 
 
 # =============================================================================

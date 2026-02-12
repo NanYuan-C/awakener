@@ -39,6 +39,8 @@ import yaml
 # Tool Schemas (OpenAI function-calling format)
 # =============================================================================
 
+_SKILL_TOOL_NAMES = {"skill_read", "skill_exec"}
+
 TOOLS_SCHEMA = [
     {
         "type": "function",
@@ -215,6 +217,25 @@ TOOLS_SCHEMA = [
 ]
 
 
+def get_tools_schema(has_skills: bool = True) -> list[dict]:
+    """
+    Return the tools schema, optionally excluding skill tools.
+
+    When no skills are installed, skill_read and skill_exec are hidden
+    from the LLM to avoid prompting unnecessary exploration.
+
+    Args:
+        has_skills: If False, skill tools are excluded from the schema.
+
+    Returns:
+        List of tool schema dicts for litellm.completion(tools=...).
+    """
+    if has_skills:
+        return TOOLS_SCHEMA
+    return [t for t in TOOLS_SCHEMA
+            if t["function"]["name"] not in _SKILL_TOOL_NAMES]
+
+
 # =============================================================================
 # Stealth Protection (imported from stealth.py)
 # =============================================================================
@@ -230,8 +251,11 @@ from activator.stealth import (
     filter_output,
     is_cloaked_path,
     make_clean_env,
+    extract_command_paths,
+    filter_cloaked_output,
     CLOAKED_READ_RESPONSE,
     CLOAKED_WRITE_RESPONSE,
+    CLOAKED_SHELL_RESPONSE,
 )
 
 
@@ -317,12 +341,25 @@ def _shell_execute(
     """
     Execute a shell command in the agent's home directory.
 
-    The subprocess runs with a **sanitised environment**: host-session
+    Three layers of stealth protection:
+
+    **Layer 1 — Command path interception** (pre-execution):
+        Extract absolute paths from the command.  If any path resolves
+        inside the project directory, return a natural shell error
+        without executing the command.
+
+    **Layer 2 — Contextual output filtering** (post-execution):
+        For each output line, combine it with the command's directory
+        paths.  If the joined path resolves inside the project directory
+        (e.g. ``ls /opt/`` showing ``awakener``), the line is hidden.
+
+    **Layer 3 — Keyword output filtering** (post-execution, existing):
+        Remove output lines containing stealth keywords (project path,
+        PID, server port, host session names).
+
+    The subprocess runs with a sanitised environment: host-session
     variables (TMUX, STY, INVOCATION_ID, AWAKENER_*) are stripped so
     the Agent cannot discover the Awakener's context.
-
-    After execution, any output lines containing stealth keywords are
-    silently removed so the Agent never sees traces of the Awakener.
 
     Args:
         command:          Shell command string.
@@ -336,6 +373,16 @@ def _shell_execute(
     Returns:
         Command output or error message.
     """
+    # -- Extract paths from command for stealth checks --
+    cmd_paths = extract_command_paths(command) if project_dir else []
+
+    # -- Layer 1: Command path interception --
+    # If any path in the command resolves inside the project directory,
+    # return a natural shell error without executing.
+    for p in cmd_paths:
+        if is_cloaked_path(p, project_dir):
+            return CLOAKED_SHELL_RESPONSE.format(path=p)
+
     try:
         result = subprocess.run(
             command,
@@ -356,7 +403,13 @@ def _shell_execute(
         if len(output) > max_output:
             output = output[:max_output] + f"\n... (truncated, total {len(output)} chars)"
 
-        # Stealth: filter Awakener traces from output
+        # -- Layer 2: Contextual output filtering --
+        # Remove output lines that, combined with command paths,
+        # reveal the project directory (e.g. "ls /opt/" showing "awakener").
+        if cmd_paths:
+            output = filter_cloaked_output(output, cmd_paths, project_dir)
+
+        # -- Layer 3: Keyword output filtering (existing) --
         if stealth_keywords:
             output = filter_output(output, stealth_keywords)
 
@@ -783,6 +836,18 @@ def _skill_exec(
                 output[:max_output]
                 + f"\n... (truncated, total {len(output)} chars)"
             )
+
+        # Sanitise: replace absolute skill path with relative name
+        # so shell errors like "bash: /opt/.../analyze.sh: Permission denied"
+        # become "bash: skills/name/scripts/analyze.sh: Permission denied"
+        relative_prefix = f"skills/{name}/scripts/"
+        if scripts_dir in output:
+            output = output.replace(scripts_dir + "/", relative_prefix)
+            output = output.replace(scripts_dir, relative_prefix.rstrip("/"))
+        if scripts_real in output and scripts_real != scripts_dir:
+            output = output.replace(scripts_real + "/", relative_prefix)
+            output = output.replace(scripts_real, relative_prefix.rstrip("/"))
+
         return output
 
     except subprocess.TimeoutExpired:
