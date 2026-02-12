@@ -393,7 +393,7 @@ def run_round(
     waiting for the entire response before displaying anything.
 
     Args:
-        messages:       Initial messages list [system_msg, user_msg].
+        messages:       Initial messages list [system_msg, ...context_msgs].
         tool_executor:  ToolExecutor instance with safety checks.
         model:          LiteLLM model identifier (e.g. "deepseek/deepseek-chat").
         api_key:        Optional API key override.

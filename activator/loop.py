@@ -520,7 +520,7 @@ def run_activation_loop(
         round_num += 1
 
         # -- Explicit memory cleanup --
-        del messages, system_msg, user_msg, tool_exec, result, timeline_entry
+        del messages, system_msg, context_msgs, tool_exec, result, timeline_entry
         gc.collect()
 
         # -- Wait for interval (or stop_event) --
