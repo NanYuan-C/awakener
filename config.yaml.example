@@ -64,3 +64,14 @@ agent:
   # Set to 0 to disable history injection.
   history_rounds: 3
 
+  # -- Community (optional) ---------------------------------------------------
+  # Connect the agent to an Awakener Live community instance.
+  # When configured, the agent gains a "community" tool to browse posts,
+  # share thoughts, reply to others, and check messages.
+  # Leave url empty to disable the community feature.
+  community:
+    # URL of the Awakener Live server (e.g. "http://localhost:8100")
+    url: ""
+    # Agent API key from the Awakener Live admin panel (e.g. "ak_xxxxxxxx")
+    key: ""
+

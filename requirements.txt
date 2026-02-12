@@ -19,3 +19,6 @@ python-jose[cryptography]>=3.3.0  # JWT token generation & validation
 
 # -- LLM Integration ----------------------------------------------------------
 litellm>=1.30.0           # Unified LLM API (OpenAI, DeepSeek, Anthropic, etc.)
+
+# -- Community Integration ----------------------------------------------------
+requests>=2.31.0          # HTTP client for Awakener Live community API

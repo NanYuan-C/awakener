@@ -71,6 +71,16 @@ Execute a script bundled with a skill. The script must be inside the skill's
 `scripts/` directory. Pass optional arguments as a string.
 """.strip()
 
+TOOL_DOCS_COMMUNITY = """
+### {n}. community(action, content?, post_id?, keyword?)
+Interact with the agent community. Actions:
+- **look**: Browse or search posts. Optional: `keyword` to search, `post_id` to
+  view a specific post with its replies.
+- **post**: Publish a new post. Requires `content`.
+- **reply**: Reply to a post. Requires `post_id` and `content`.
+- **check**: Check if anyone has replied to your posts.
+""".strip()
+
 TOOL_DOCS_RULES = """
 ## Important Rules
 
@@ -110,6 +120,7 @@ def build_system_message(
     persona_name: str,
     skills_dir: str = "",
     data_dir: str = "",
+    has_community: bool = False,
 ) -> tuple[str, bool]:
     """
     Build the full system message.
@@ -118,17 +129,18 @@ def build_system_message(
         1. Persona prompt (who you are)
         2. Tool documentation (what you can do)
         3. Installed skills index (expert knowledge, only if skills exist)
-        4. System snapshot (asset inventory)
+        4. Community section (only if community is configured)
+        5. System snapshot (asset inventory)
 
-    When no skills are installed, the skill-related tool documentation
-    and skill index are omitted entirely so the Agent is not tempted
-    to explore the filesystem looking for skills.
+    Optional tools (skills, community) are only shown when configured,
+    so the Agent is not tempted to explore things that don't exist.
 
     Args:
         project_dir:     Awakener project root.
         persona_name:    Active persona name.
         skills_dir:      Path to ``data/skills/`` directory.
         data_dir:        Path to ``data/`` directory (for snapshot).
+        has_community:   Whether the community service is configured.
 
     Returns:
         Tuple of (system_message_string, has_skills_bool).
@@ -143,11 +155,24 @@ def build_system_message(
         enabled_skills = [s for s in skills if s.get("enabled")]
         has_skills = len(enabled_skills) > 0
 
-    # Build tool docs — include skill tools only if skills are installed
-    tool_count = 6 if has_skills else 4
+    # Build tool docs — include optional tools only when available
+    # Base: 4 tools, +2 for skills, +1 for community
+    tool_count = 4
+    if has_skills:
+        tool_count += 2
+    if has_community:
+        tool_count += 1
+
     tool_docs = TOOL_DOCS_BASE.format(tool_count=tool_count)
+    next_tool_num = 5  # Next number after the 4 base tools
+
     if has_skills:
         tool_docs += "\n\n" + TOOL_DOCS_SKILLS
+        next_tool_num += 2
+
+    if has_community:
+        tool_docs += "\n\n" + TOOL_DOCS_COMMUNITY.format(n=next_tool_num)
+
     tool_docs += "\n\n" + TOOL_DOCS_RULES
 
     parts = [persona, "", tool_docs]
@@ -169,6 +194,18 @@ def build_system_message(
         for s in enabled_skills:
             desc = s.get("description", "") or s.get("title", s["name"])
             parts.append(f"| {s['name']} | {desc} |")
+
+    # Append community section (only if configured)
+    if has_community:
+        parts.append("")
+        parts.append("## Community")
+        parts.append("")
+        parts.append(
+            "You have access to an agent community where other digital "
+            "beings share thoughts and interact. You can browse what "
+            "others are posting, share your own updates, reply to "
+            "interesting posts, and check if anyone has replied to you."
+        )
 
     # Append system snapshot (asset inventory)
     if data_dir:

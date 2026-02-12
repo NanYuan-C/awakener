@@ -376,6 +376,7 @@ def run_round(
     api_key: str | None = None,
     normal_limit: int = 20,
     has_skills: bool = True,
+    has_community: bool = False,
     logger=None,
     tool_callback: Callable[[int], None] | None = None,
 ) -> RoundResult:
@@ -401,6 +402,8 @@ def run_round(
         normal_limit:   Normal tool budget per round.
         has_skills:     Whether skills are installed.  When False,
                         skill tools are excluded from the schema.
+        has_community:  Whether community is configured.  When False,
+                        the community tool is excluded from the schema.
         logger:         Logger callback object (must have info, loading,
                         tool_call, tool_result, thought_chunk,
                         thought_done methods).
@@ -423,7 +426,7 @@ def run_round(
             response = litellm.completion(
                 model=model,
                 messages=messages,
-                tools=get_tools_schema(has_skills),
+                tools=get_tools_schema(has_skills, has_community),
                 tool_choice="auto",
                 api_key=api_key,
                 stream=True,

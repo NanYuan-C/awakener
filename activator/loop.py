@@ -317,6 +317,12 @@ def run_activation_loop(
     persona = "default"  # Single global prompt (always default.md)
     snapshot_model = agent_config.get("snapshot_model", "") or ""
 
+    # Community settings (optional)
+    community_cfg = agent_config.get("community", {})
+    community_url = community_cfg.get("url", "") or ""
+    community_key = community_cfg.get("key", "") or ""
+    has_community = bool(community_url and community_key)
+
     # API key: try environment variable based on model provider
     api_key = _resolve_api_key(model)
 
@@ -371,6 +377,11 @@ def run_activation_loop(
             interval = _live_cfg.get("interval", interval)
             history_rounds = _live_cfg.get("history_rounds", history_rounds)
             snapshot_model = _live_cfg.get("snapshot_model", "") or ""
+            # Hot-reload community config
+            _live_community = _live_cfg.get("community", {})
+            community_url = _live_community.get("url", "") or ""
+            community_key = _live_community.get("key", "") or ""
+            has_community = bool(community_url and community_key)
         except Exception:
             pass  # Keep previous values if reload fails
 
@@ -398,9 +409,10 @@ def run_activation_loop(
             except Exception:
                 pass  # Event loop may be closed
 
-        # Build context messages (includes snapshot + skills)
+        # Build context messages (includes snapshot + skills + community)
         system_msg, has_skills = build_system_message(
             project_dir, persona, skills_dir, data_dir,
+            has_community=has_community,
         )
 
         context_msgs = build_context_messages(
@@ -428,6 +440,8 @@ def run_activation_loop(
             max_output=max_output,
             host_env=host_env,
             skills_dir=skills_dir,
+            community_url=community_url,
+            community_key=community_key,
         )
 
         # Define tool callback for real-time tool count updates
@@ -456,6 +470,7 @@ def run_activation_loop(
             api_key=api_key,
             normal_limit=max_tool_calls,
             has_skills=has_skills,
+            has_community=has_community,
             logger=logger,
             tool_callback=on_tool_used,
         )
