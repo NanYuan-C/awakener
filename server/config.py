@@ -37,6 +37,7 @@ DEFAULTS = {
         "max_tool_calls": 20,
         "shell_timeout": 30,
         "max_output_chars": 4000,
+        "history_rounds": 3,
     },
 }
 

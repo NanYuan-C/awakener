@@ -58,3 +58,9 @@ agent:
   # Prevents context window overflow from large outputs.
   max_output_chars: 4000
 
+  # Number of recent rounds to inject as conversation history.
+  # The agent sees these as its own prior conversations (multi-turn format).
+  # Only the final output (summary) from each round is included.
+  # Set to 0 to disable history injection.
+  history_rounds: 3
+

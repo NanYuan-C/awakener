@@ -33,7 +33,7 @@ from typing import Any, Callable
 
 from activator.memory import MemoryManager
 from activator.tools import ToolExecutor, detect_host_env
-from activator.context import build_system_message, build_user_message
+from activator.context import build_system_message, build_context_messages
 from activator.agent import run_round
 from activator.snapshot import update_snapshot, SnapshotUpdateError
 
@@ -313,6 +313,7 @@ def run_activation_loop(
     max_tool_calls = agent_config.get("max_tool_calls", 20)
     shell_timeout = agent_config.get("shell_timeout", 30)
     max_output = agent_config.get("max_output_chars", 4000)
+    history_rounds = agent_config.get("history_rounds", 3)
     persona = "default"  # Single global prompt (always default.md)
     snapshot_model = agent_config.get("snapshot_model", "") or ""
 
@@ -368,6 +369,7 @@ def run_activation_loop(
             shell_timeout = _live_cfg.get("shell_timeout", shell_timeout)
             max_output = _live_cfg.get("max_output_chars", max_output)
             interval = _live_cfg.get("interval", interval)
+            history_rounds = _live_cfg.get("history_rounds", history_rounds)
             snapshot_model = _live_cfg.get("snapshot_model", "") or ""
         except Exception:
             pass  # Keep previous values if reload fails
@@ -401,14 +403,15 @@ def run_activation_loop(
             project_dir, persona, skills_dir, data_dir,
         )
 
-        user_msg = build_user_message(
+        context_msgs = build_context_messages(
             round_num, max_tool_calls, memory,
             agent_home=agent_home,
+            history_rounds=history_rounds,
         )
 
         messages = [
             {"role": "system", "content": system_msg},
-            {"role": "user", "content": user_msg},
+            *context_msgs,
         ]
 
         logger.info(

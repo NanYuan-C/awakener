@@ -11,12 +11,10 @@ The context consists of two parts:
    - Installed skills index (progressive disclosure)
    - System snapshot (asset inventory — services, projects, issues)
 
-2. User message:
-   - Current time and round number
-   - Tool budget for this round
-   - Last Round Summary: final output only (no action log, to avoid repetition)
-   - Inspiration from admin (if any)
-   - Wake-up signal (you wake up in your room)
+2. Context messages (multi-turn format):
+   - Historical rounds as user/assistant pairs (final output only)
+   - Inspiration as a system message (if any)
+   - Current round wake-up as user message
 """
 
 import os
@@ -162,73 +160,89 @@ def build_system_message(
     return "\n".join(parts)
 
 
-def build_user_message(
+def build_context_messages(
     round_num: int,
     max_tool_calls: int,
     memory: MemoryManager,
     agent_home: str,
-    inject_timeline: int = 1,
-) -> str:
+    history_rounds: int = 3,
+) -> list[dict]:
     """
-    Build the user message with contextual information.
+    Build the multi-turn context messages for a new round.
 
-    This message is sent at the start of each round and contains:
-    - Current UTC time and round number
-    - Tool budget for this round
-    - Last Round Summary: only the final output (no action log steps)
-    - Inspiration from admin (if any)
-    - Wake-up signal (you wake up in your room)
+    Returns a list of messages in standard chat format that simulates
+    a multi-turn conversation between the activator (user) and the agent
+    (assistant). Historical rounds are injected as user/assistant pairs
+    so the LLM perceives them as its own prior conversations.
+
+    Structure:
+        1. Historical rounds (oldest first):
+           - {"role": "user",      "content": "Round N | time | stats"}
+           - {"role": "assistant", "content": "<final output from round N>"}
+        2. Inspiration (if any):
+           - {"role": "system",    "content": "A spark of inspiration: ..."}
+        3. Current round wake-up:
+           - {"role": "user",      "content": "time, round, budget, wake up"}
 
     Args:
-        round_num:        Current activation round number.
-        max_tool_calls:   Tool budget for this round.
-        memory:           MemoryManager instance.
-        agent_home:       Agent's home directory path.
-        inject_timeline:  Number of recent timeline entries to inject.
+        round_num:      Current activation round number.
+        max_tool_calls: Tool budget for this round.
+        memory:         MemoryManager instance.
+        agent_home:     Agent's home directory path.
+        history_rounds: Number of recent rounds to inject as history.
 
     Returns:
-        Complete user message string.
+        List of message dicts (role + content). Does NOT include the
+        system message — the caller prepends that.
     """
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    parts = []
+    messages = []
 
-    # Header
-    parts.append(f"Current time: {now}")
-    parts.append(f"Round {round_num} (tool budget: {max_tool_calls})")
-    parts.append("")
-
-    # Last round summary (final output only — no action log to avoid
-    # the agent repeating the same steps or copying mistakes from last round)
-    recent_timeline = memory.get_recent_timeline(count=inject_timeline)
+    # -- Historical rounds as user/assistant pairs (oldest first) --
+    recent_timeline = memory.get_recent_timeline(count=history_rounds)
     if recent_timeline:
-        parts.append("## Last Round Summary")
+        # get_recent_timeline returns oldest first (chronological order)
         for entry in recent_timeline:
             r = entry.get("round", "?")
             ts = entry.get("timestamp", "")
             tools = entry.get("tools_used", 0)
             dur = entry.get("duration", 0)
             summary = entry.get("summary", "")
-            # Extract only the final output (after last timestamp)
+
             final_output = _extract_final_output(summary)
             if not final_output:
-                final_output = "(no summary available)"
-            parts.append(
-                f"--- Round {r} | {ts} | Tools: {tools} | {dur}s ---"
-            )
-            parts.append(final_output)
-            parts.append("")
+                final_output = "(no output)"
 
-    # Inspiration
+            # User message: activator's wake-up signal for that round
+            messages.append({
+                "role": "user",
+                "content": f"Round {r} | {ts} | Tools: {tools} | {dur}s",
+            })
+            # Assistant message: agent's final output from that round
+            messages.append({
+                "role": "assistant",
+                "content": final_output,
+            })
+
+    # -- Inspiration (system-level injection, if present) --
     inspiration = memory.read_inspiration()
     if inspiration:
-        parts.append("## Inspiration")
-        parts.append(
-            "A sudden spark of inspiration crosses your mind: "
-            f'"{inspiration}"'
-        )
-        parts.append("")
+        messages.append({
+            "role": "system",
+            "content": (
+                "A sudden spark of inspiration crosses your mind: "
+                f'"{inspiration}"'
+            ),
+        })
 
-    # Wake-up signal
-    parts.append(f"You wake up. Your home directory is `{agent_home}`.")
+    # -- Current round wake-up --
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    messages.append({
+        "role": "user",
+        "content": (
+            f"Current time: {now}\n"
+            f"Round {round_num} (tool budget: {max_tool_calls})\n\n"
+            f"You wake up. Your home directory is `{agent_home}`."
+        ),
+    })
 
-    return "\n".join(parts)
+    return messages
