@@ -14,7 +14,7 @@ The context consists of two parts:
 2. User message:
    - Current time and round number
    - Tool budget for this round
-   - Recent Activity: 1 round of timeline action log (concise step-by-step)
+   - Last Round Summary: final output only (no action log, to avoid repetition)
    - Inspiration from admin (if any)
    - Wake-up signal (you wake up in your room)
 """
@@ -23,7 +23,7 @@ import os
 from datetime import datetime, timezone
 from activator.memory import MemoryManager
 from activator.tools import scan_skills
-from activator.snapshot import load_snapshot, render_snapshot_markdown
+from activator.snapshot import load_snapshot, render_snapshot_markdown, _extract_final_output
 
 
 # =============================================================================
@@ -175,7 +175,7 @@ def build_user_message(
     This message is sent at the start of each round and contains:
     - Current UTC time and round number
     - Tool budget for this round
-    - Recent Activity: action log from the last round's timeline
+    - Last Round Summary: only the final output (no action log steps)
     - Inspiration from admin (if any)
     - Wake-up signal (you wake up in your room)
 
@@ -197,22 +197,25 @@ def build_user_message(
     parts.append(f"Round {round_num} (tool budget: {max_tool_calls})")
     parts.append("")
 
-    # Recent activity (timeline action log)
+    # Last round summary (final output only — no action log to avoid
+    # the agent repeating the same steps or copying mistakes from last round)
     recent_timeline = memory.get_recent_timeline(count=inject_timeline)
     if recent_timeline:
-        parts.append("## Recent Activity")
+        parts.append("## Last Round Summary")
         for entry in recent_timeline:
             r = entry.get("round", "?")
             ts = entry.get("timestamp", "")
             tools = entry.get("tools_used", 0)
             dur = entry.get("duration", 0)
-            action_log = entry.get("action_log", "")
-            if not action_log:
-                action_log = entry.get("summary", "")
+            summary = entry.get("summary", "")
+            # Extract only the final output (after last timestamp)
+            final_output = _extract_final_output(summary)
+            if not final_output:
+                final_output = "(no summary available)"
             parts.append(
                 f"--- Round {r} | {ts} | Tools: {tools} | {dur}s ---"
             )
-            parts.append(action_log)
+            parts.append(final_output)
             parts.append("")
 
     # Inspiration
