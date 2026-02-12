@@ -214,12 +214,22 @@ def render_snapshot_markdown(snapshot: dict) -> str:
 SNAPSHOT_UPDATER_PROMPT = """\
 You are a system auditor for an autonomous AI agent's Linux server.
 
-Your job: given the agent's action log from this round and the current system \
-snapshot, output TWO things in YAML format:
+Your job: given the agent's round data and the current system snapshot, \
+output the following in YAML format:
 1. The **changes** (delta) to the snapshot — add/update/remove only.
 2. An **activity post** summarizing this round for a social feed.
+3. Optionally, a **quote** — a verbatim excerpt from the agent's own words.
 
 The program will merge your delta into the existing snapshot automatically.
+
+## Input Sections
+
+You will receive two source sections:
+- **Action Log** — timestamped tool-calling steps. Use this for snapshot \
+delta and activity content.
+- **Agent Final Output** (if present) — the agent's closing text after all \
+tool calls (no timestamps). Use this ONLY for quote extraction. Do NOT use \
+it for snapshot updates.
 
 ## Rules
 
@@ -264,10 +274,10 @@ no new output), use ONLY the `routine` tag.
 11. **quote** (optional) — If the agent produced something genuinely \
 striking in its own thinking or output, include a `quote` field inside \
 the `activity` block. Rules for quotes:
-    - Must be **copied word-for-word** from the agent's [THOUGHT] blocks or \
-final text in the action log above. You MUST be able to find the exact quote \
-in the action log. NEVER fabricate, paraphrase, summarize, or compose a new \
-quote — if you cannot point to the exact words in the log, omit the quote.
+    - Must be **copied word-for-word** from the "Agent Final Output" section. \
+You MUST be able to find the exact quote in that section. NEVER fabricate, \
+paraphrase, summarize, or compose a new quote — if the Final Output section \
+is missing or contains nothing interesting, omit the quote.
     - **NEVER translate.** Copy the exact original text as-is, preserving \
 the original language (Chinese, English, or whatever the agent used).
     - NEVER quote user inspirations, system messages, or command outputs — \
@@ -508,6 +518,45 @@ def _merge_delta(old_snapshot: dict, delta: dict, round_num: int) -> dict:
     return snapshot
 
 
+import re as _re
+
+def _extract_final_output(summary: str) -> str:
+    """
+    Extract the agent's final output from the summary.
+
+    The summary contains timestamped lines like ``[HH:MM:SS] ...`` from the
+    tool-calling phase, followed by a closing section without timestamps —
+    the agent's natural final reflection/summary.
+
+    This function returns everything after the last timestamped line,
+    stripped of leading/trailing whitespace.
+
+    Args:
+        summary: Full summary text from RoundResult.
+
+    Returns:
+        The final output text (may be empty if no non-timestamped tail exists).
+    """
+    if not summary:
+        return ""
+
+    lines = summary.split("\n")
+
+    # Find the last line that starts with a timestamp pattern [HH:MM:SS]
+    last_ts_idx = -1
+    for i, line in enumerate(lines):
+        if _re.match(r"^\[?\d{2}:\d{2}:\d{2}\]?\s", line):
+            last_ts_idx = i
+
+    if last_ts_idx == -1:
+        # No timestamps at all — the entire summary is "final output"
+        return summary.strip()
+
+    # Everything after the last timestamped line
+    tail = "\n".join(lines[last_ts_idx + 1:]).strip()
+    return tail
+
+
 def _build_updater_messages(
     old_snapshot: dict,
     timeline_entry: dict,
@@ -535,12 +584,15 @@ def _build_updater_messages(
     else:
         old_yaml = "(empty — this is the first snapshot)"
 
-    # Build the action log from the timeline entry
-    # Only the action_log (tool-calling steps) is sent — the final summary
-    # is excluded because it adds noise without useful structural info.
+    # Build inputs from the timeline entry:
+    # - action_log: timestamped tool-calling steps (for snapshot updates)
+    # - final_output: the agent's closing text after all tool calls
+    #   (no timestamp prefix — this is where quotes come from)
     action_log = timeline_entry.get("action_log", "")
     tools_used = timeline_entry.get("tools_used", 0)
     duration = timeline_entry.get("duration", 0)
+
+    final_output = _extract_final_output(timeline_entry.get("summary", ""))
 
     user_content = (
         f"## Current Snapshot\n\n"
@@ -548,6 +600,17 @@ def _build_updater_messages(
         f"## Round {round_num} Action Log "
         f"(Tools: {tools_used}, Duration: {duration}s)\n\n"
         f"{action_log}\n\n"
+    )
+
+    if final_output:
+        user_content += (
+            f"## Agent Final Output\n\n"
+            f"(Use this section ONLY for quote extraction, "
+            f"not for snapshot updates.)\n\n"
+            f"{final_output}\n\n"
+        )
+
+    user_content += (
         f"---\n\n"
         f"Now output ONLY the delta (changes) as pure YAML (no fences, no explanation). "
         f"If nothing changed, output: no_changes: true"
