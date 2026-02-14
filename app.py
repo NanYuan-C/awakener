@@ -77,7 +77,7 @@ def main():
 
     # Command-line args override config file
     host = args.host or config["web"].get("host", "0.0.0.0")
-    port = args.port or config["web"].get("port", 8080)
+    port = args.port or config["web"].get("port", 39120)
 
     # -- Print startup banner --------------------------------------------------
     print()
@@ -87,7 +87,7 @@ def main():
     print("  ╚══════════════════════════════════════════════╝")
     print()
     print(f"  Console : http://{host}:{port}")
-    print(f"  API Docs: http://{host}:{port}/docs")
+    print(f"  Project : https://github.com/NanYuan-C/awakener")
     print()
 
     # -- Start the web server --------------------------------------------------

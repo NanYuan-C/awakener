@@ -12,8 +12,10 @@
 # -- Web Server ---------------------------------------------------------------
 # The management console web server configuration.
 web:
-  # Port number for the web console (default: 8080)
-  port: 8080
+  # Port number for the web console (default: 39120)
+  # A high, uncommon port is used by default to avoid conflicts
+  # with services the agent may create (which often use 8080, 3000, etc.)
+  port: 39120
 
   # Host binding address
   # Use "0.0.0.0" to allow external access, "127.0.0.1" for local only
@@ -48,11 +50,11 @@ agent:
 
   # Maximum number of tool calls allowed per activation round.
   # Higher values let the agent do more per round but cost more tokens.
-  max_tool_calls: 20
+  max_tool_calls: 30
 
   # Timeout in seconds for shell command execution.
   # Commands running longer than this will be killed.
-  shell_timeout: 30
+  shell_timeout: 120
 
   # Maximum characters returned from tool output (read_file, shell_execute).
   # Prevents context window overflow from large outputs.

@@ -59,6 +59,16 @@ if [ "$EUID" -ne 0 ] && [ "$INSTALL_DIR" = "$DEFAULT_INSTALL_DIR" ]; then
     warn "Not running as root. You may need sudo for /opt and /home directories."
 fi
 
+# Update package index first (critical for fresh servers)
+APT_UPDATED=false
+update_apt() {
+    if [ "$APT_UPDATED" = false ] && command -v apt-get &> /dev/null; then
+        info "Updating package index..."
+        apt-get update -qq
+        APT_UPDATED=true
+    fi
+}
+
 # Check Python
 PYTHON_CMD=""
 for cmd in python3 python; do
@@ -76,8 +86,8 @@ done
 if [ -z "$PYTHON_CMD" ]; then
     warn "Python >= $PYTHON_MIN_VERSION not found. Attempting to install..."
     if command -v apt-get &> /dev/null; then
-        apt-get update -qq
-        apt-get install -y -qq python3 python3-pip python3-venv
+        update_apt
+        apt-get install -y -qq python3 python3-pip
         PYTHON_CMD="python3"
     elif command -v yum &> /dev/null; then
         yum install -y python3 python3-pip
@@ -91,12 +101,15 @@ if [ -z "$PYTHON_CMD" ]; then
 fi
 
 PY_VERSION=$("$PYTHON_CMD" --version 2>&1)
+PY_MINOR=$("$PYTHON_CMD" -c "import sys; print(sys.version_info.minor)" 2>/dev/null)
+PY_MAJOR=$("$PYTHON_CMD" -c "import sys; print(sys.version_info.major)" 2>/dev/null)
 ok "Python: $PY_VERSION ($PYTHON_CMD)"
 
 # Check pip
 if ! "$PYTHON_CMD" -m pip --version &> /dev/null; then
     warn "pip not found. Attempting to install..."
     if command -v apt-get &> /dev/null; then
+        update_apt
         apt-get install -y -qq python3-pip
     else
         "$PYTHON_CMD" -m ensurepip --upgrade 2>/dev/null || error "Cannot install pip. Please install it manually."
@@ -105,10 +118,17 @@ fi
 ok "pip: $("$PYTHON_CMD" -m pip --version 2>&1 | head -1)"
 
 # Check venv module
+# On Ubuntu/Debian, the venv module requires a version-specific package
+# e.g., python3.12-venv for Python 3.12
 if ! "$PYTHON_CMD" -m venv --help &> /dev/null; then
     warn "venv module not found. Attempting to install..."
     if command -v apt-get &> /dev/null; then
-        apt-get install -y -qq python3-venv
+        update_apt
+        # Try version-specific package first (e.g., python3.12-venv),
+        # then fall back to generic python3-venv
+        VENV_PKG="python${PY_MAJOR}.${PY_MINOR}-venv"
+        info "Installing $VENV_PKG ..."
+        apt-get install -y -qq "$VENV_PKG" 2>/dev/null || apt-get install -y -qq python3-venv
     else
         error "Cannot install python3-venv. Please install it manually."
     fi
@@ -119,6 +139,7 @@ ok "venv module available"
 if ! command -v git &> /dev/null; then
     warn "git not found. Attempting to install..."
     if command -v apt-get &> /dev/null; then
+        update_apt
         apt-get install -y -qq git
     elif command -v yum &> /dev/null; then
         yum install -y git
@@ -230,18 +251,15 @@ echo ""
 echo "  1. Add your API key:"
 echo "     nano $INSTALL_DIR/.env"
 echo ""
-echo "  2. (Optional) Edit agent home / model / interval:"
-echo "     nano $INSTALL_DIR/config.yaml"
-echo ""
-echo "  3. Start Awakener:"
+echo "  2. Start Awakener:"
 echo "     cd $INSTALL_DIR"
 echo "     source venv/bin/activate"
 echo "     python app.py"
 echo ""
-echo "  4. Or run in tmux (recommended for production):"
+echo "  3. Or run in tmux (recommended for production):"
 echo "     tmux new -s awakener"
 echo "     cd $INSTALL_DIR && source venv/bin/activate && python app.py"
 echo "     # Press Ctrl+B then D to detach"
 echo ""
-echo "  Console will be available at: http://your-server-ip:8080"
+echo "  Console will be available at: http://your-server-ip:39120"
 echo ""

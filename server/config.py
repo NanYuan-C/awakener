@@ -26,7 +26,7 @@ from typing import Any
 # These ensure the application always has sensible defaults.
 DEFAULTS = {
     "web": {
-        "port": 8080,
+        "port": 39120,
         "host": "0.0.0.0",
     },
     "agent": {
@@ -34,8 +34,8 @@ DEFAULTS = {
         "model": "deepseek/deepseek-chat",
         "snapshot_model": "",
         "interval": 60,
-        "max_tool_calls": 20,
-        "shell_timeout": 30,
+        "max_tool_calls": 30,
+        "shell_timeout": 120,
         "max_output_chars": 4000,
         "history_rounds": 3,
         "community": {

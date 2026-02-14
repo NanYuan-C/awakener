@@ -349,7 +349,7 @@ def run_activation_loop(
 
     # Include the web server port so the agent can't probe it
     web_config = config.get("web", {})
-    host_env["server_port"] = web_config.get("port", 8080)
+    host_env["server_port"] = web_config.get("port", 39120)
 
     logger.info(f"[START] Activator started | Model: {model} | Home: {agent_home}")
     if host_env:
