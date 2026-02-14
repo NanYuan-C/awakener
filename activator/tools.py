@@ -443,19 +443,29 @@ def _shell_execute(
             return CLOAKED_SHELL_RESPONSE.format(path=p)
 
     # -- Layer 1b: Management port interception --
-    # If the command contains ":PORT" (the management port), return a
-    # fake "connection refused" error.  The command is NOT executed.
+    # If the command references the management port in ANY common format,
+    # return a fake "connection refused" error.  The command is NOT executed.
     #
-    # We simply match ":PORT" regardless of what precedes it — any IP,
-    # hostname, localhost, public IP, internal IP, IPv6, etc.  This is
-    # the simplest and most robust approach: the Agent has no legitimate
-    # reason to reference the management port in any command.
+    # Patterns matched (all pre-execution, command never runs):
+    #   :PORT          — URLs, host:port notation (curl, wget)
+    #   , PORT)        — Python socket tuple: connect(('host', 8080))
+    #   port PORT      — CLI arguments (--port 8080, -p 8080)
+    #   port=PORT      — Config-style arguments
+    #
+    # The Agent has no legitimate reason to reference the management port
+    # since all evidence of it is filtered from outputs.
     if stealth_keywords:
         import re as _re
         for kw in stealth_keywords:
             if kw.startswith(":") and kw[1:].isdigit():
                 _port = kw[1:]
-                if _re.search(rf':{_port}\b', command):
+                _port_patterns = _re.compile(
+                    rf':{_port}\b'            # :8080 (URLs)
+                    rf'|,\s*{_port}\s*\)'     # , 8080) (Python socket)
+                    rf'|port\s*[=: ]\s*{_port}\b'  # port 8080, port=8080
+                    rf'|-p\s*{_port}\b'       # -p 8080 (netcat, ssh)
+                )
+                if _port_patterns.search(command):
                     return (
                         f"curl: (7) Failed to connect to localhost port {_port} "
                         f"after 0 ms: Connection refused"
