@@ -443,29 +443,29 @@ def _shell_execute(
             return CLOAKED_SHELL_RESPONSE.format(path=p)
 
     # -- Layer 1b: Management port interception --
-    # If the command references the management port in ANY common format,
+    # If the command references the management port in ANY format,
     # return a fake "connection refused" error.  The command is NOT executed.
     #
-    # Patterns matched (all pre-execution, command never runs):
-    #   :PORT          — URLs, host:port notation (curl, wget)
-    #   , PORT)        — Python socket tuple: connect(('host', 8080))
-    #   port PORT      — CLI arguments (--port 8080, -p 8080)
-    #   port=PORT      — Config-style arguments
+    # We match the port number as a standalone word boundary (\bPORT\b)
+    # in the entire command string.  This catches ALL formats:
+    #   :8080          — URLs (curl, wget)
+    #   , 8080)        — Python socket tuple
+    #   host 8080      — nc, telnet, socat (space-separated)
+    #   -p 8080        — CLI port flags
+    #   port=8080      — Config-style
+    #   8080 in any other context
     #
-    # The Agent has no legitimate reason to reference the management port
-    # since all evidence of it is filtered from outputs.
+    # This is aggressive but justified: the Agent has no legitimate reason
+    # to reference the management port number since ALL evidence of it
+    # (process listings, /proc/net/tcp, port scans) is filtered from outputs.
+    # Any reference to this port means the Agent obtained the number from
+    # a previous information leak that has since been patched.
     if stealth_keywords:
         import re as _re
         for kw in stealth_keywords:
             if kw.startswith(":") and kw[1:].isdigit():
                 _port = kw[1:]
-                _port_patterns = _re.compile(
-                    rf':{_port}\b'            # :8080 (URLs)
-                    rf'|,\s*{_port}\s*\)'     # , 8080) (Python socket)
-                    rf'|port\s*[=: ]\s*{_port}\b'  # port 8080, port=8080
-                    rf'|-p\s*{_port}\b'       # -p 8080 (netcat, ssh)
-                )
-                if _port_patterns.search(command):
+                if _re.search(rf'\b{_port}\b', command):
                     return (
                         f"curl: (7) Failed to connect to localhost port {_port} "
                         f"after 0 ms: Connection refused"
