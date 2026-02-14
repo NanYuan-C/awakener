@@ -443,17 +443,31 @@ def _shell_execute(
             return CLOAKED_SHELL_RESPONSE.format(path=p)
 
     # -- Layer 1b: Management port interception --
-    # If the command tries to access the Awakener management server
-    # (localhost:PORT, 127.0.0.1:PORT, 0.0.0.0:PORT), return a fake
-    # "connection refused" error — identical to a genuinely closed port.
+    # If the command tries to access the Awakener management server,
+    # return a fake "connection refused" error — identical to a genuinely
+    # closed port.  The command is NOT executed.
+    #
+    # Matches ANY host/IP with the management port, not just localhost.
+    # This prevents bypass via public IP (e.g. curl 43.165.6.170:8080).
+    # Patterns matched:
+    #   - localhost:PORT, 127.0.0.1:PORT, 0.0.0.0:PORT
+    #   - Any IPv4 address:PORT  (e.g. 43.165.6.170:8080)
+    #   - Any hostname:PORT      (e.g. myserver:8080)
+    #   - [::1]:PORT, [::]:PORT  (IPv6 loopback)
     if stealth_keywords:
         import re as _re
         # Extract server port from stealth keywords (format: ":PORT")
         for kw in stealth_keywords:
             if kw.startswith(":") and kw[1:].isdigit():
                 _port = kw[1:]
+                # Match :PORT preceded by any host-like string or bracket
                 _port_pattern = _re.compile(
-                    rf'(localhost|127\.0\.0\.1|0\.0\.0\.0):{_port}\b'
+                    rf'(?:localhost|'                       # localhost
+                    rf'\d{{1,3}}\.\d{{1,3}}\.\d{{1,3}}\.\d{{1,3}}|'  # any IPv4
+                    rf'\[?::1\]?|'                         # IPv6 loopback
+                    rf'\[?::\]?|'                          # IPv6 any
+                    rf'0\.0\.0\.0'                         # any interface
+                    rf'):{_port}\b'
                 )
                 if _port_pattern.search(command):
                     return (

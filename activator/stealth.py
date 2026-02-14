@@ -86,10 +86,19 @@ def build_stealth_keywords(
     if activator_pid is not None:
         keywords.append(f" {activator_pid} ")
 
-    # -- Server port --
+    # -- Server port (decimal and hex) --
+    # Decimal format catches output like "0.0.0.0:8080" in ss/netstat.
+    # Hex format catches /proc/net/tcp where ports are hex-encoded
+    # (e.g. port 8080 = "1F90").  Both are computed dynamically so
+    # they stay correct regardless of the configured port number.
     server_port = host_env.get("server_port")
     if server_port:
         keywords.append(f":{server_port}")
+        try:
+            port_hex = format(int(server_port), "04X")  # e.g. 8080 → "1F90"
+            keywords.append(port_hex)
+        except (ValueError, TypeError):
+            pass
 
     # -- Host session names --
     # Use precise patterns to avoid false positives when the session/service
