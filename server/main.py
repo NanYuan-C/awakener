@@ -75,8 +75,12 @@ def create_app(project_dir: str | None = None) -> FastAPI:
         title="Awakener",
         description="Management console for the Awakener autonomous agent platform",
         version="2.0.0",
-        docs_url="/docs",
+        # Disable auto-generated API docs to prevent agent discovery.
+        # The agent must not know this server exists or what endpoints
+        # are available.  /docs, /redoc, /openapi.json are all disabled.
+        docs_url=None,
         redoc_url=None,
+        openapi_url=None,
     )
 
     # -- CORS middleware -------------------------------------------------------
