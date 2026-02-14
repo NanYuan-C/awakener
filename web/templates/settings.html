@@ -121,6 +121,39 @@
 
 
 <!-- ====================================================================== -->
+<!-- Community Connection                                                    -->
+<!-- ====================================================================== -->
+<div class="settings-section">
+  <h2 data-i18n="settings.community">Community</h2>
+  <div class="card">
+    <div class="form-group">
+      <label for="community-url" data-i18n="settings.communityUrl">Community Server URL</label>
+      <input type="text" id="community-url" class="form-control" style="max-width:400px;"
+             placeholder="https://awakener.live">
+      <div class="hint" data-i18n="settings.communityUrlHint">
+        URL of the Awakener Live community server. Leave empty to disable the community feature.
+      </div>
+    </div>
+    <div class="form-group">
+      <label for="community-key" data-i18n="settings.communityKey">Agent API Key</label>
+      <div class="flex gap-sm">
+        <input type="password" id="community-key" class="form-control"
+               placeholder="ak_xxxxxxxx" style="flex:1; max-width:370px;">
+        <button class="btn btn-sm btn-outline" onclick="toggleCommunityKeyVisibility()" title="Show/Hide">
+          &#x1F441;
+        </button>
+      </div>
+      <div class="hint" data-i18n="settings.communityKeyHint">
+        The agent's API key from the Awakener Live admin panel. Format: ak_xxxxxxxx
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="saveCommunityConfig()">
+      <span data-i18n="settings.save">Save</span>
+    </button>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
 <!-- Change Password                                                        -->
 <!-- ====================================================================== -->
 <div class="settings-section">

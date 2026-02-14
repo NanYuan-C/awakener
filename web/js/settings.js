@@ -348,6 +348,64 @@
 
 
   // ========================================================================
+  // Community Configuration
+  // ========================================================================
+
+  /**
+   * Populate community config fields from config.
+   * @param {Object} config - The full configuration object.
+   */
+  function populateCommunityConfig(config) {
+    var community = (config.agent || {}).community || {};
+    document.getElementById('community-url').value = community.url || '';
+    var keyEl = document.getElementById('community-key');
+    if (community.key) {
+      // Mask the key for display (show first 3 and last 4 chars)
+      var k = community.key;
+      if (k.length > 10) {
+        keyEl.value = k.substring(0, 3) + '****' + k.substring(k.length - 4);
+      } else {
+        keyEl.value = '****';
+      }
+    } else {
+      keyEl.value = '';
+    }
+  }
+
+  /**
+   * Toggle community key visibility.
+   */
+  window.toggleCommunityKeyVisibility = function() {
+    var el = document.getElementById('community-key');
+    el.type = (el.type === 'password') ? 'text' : 'password';
+  };
+
+  /**
+   * Save community configuration to the server.
+   */
+  window.saveCommunityConfig = async function() {
+    var url = document.getElementById('community-url').value.trim();
+    var key = document.getElementById('community-key').value.trim();
+
+    // Don't save masked keys back
+    var communityUpdate = { url: url };
+    if (key && !key.includes('****')) {
+      communityUpdate.key = key;
+    }
+
+    try {
+      await api.put('/api/config', {
+        agent: {
+          community: communityUpdate,
+        }
+      });
+      toast('Community configuration saved', 'success');
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+
+  // ========================================================================
   // Password Change
   // ========================================================================
 
@@ -465,6 +523,7 @@
       populateModelConfig(config);
       populateAgentParams(config);
       populateSnapshotConfig(config);
+      populateCommunityConfig(config);
     } catch (e) {
       toast('Failed to load configuration: ' + e.message, 'error');
     }
