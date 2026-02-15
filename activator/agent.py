@@ -366,6 +366,42 @@ def _consume_stream(
 
 
 # =============================================================================
+# Reasoning Content Consistency
+# =============================================================================
+
+def _ensure_reasoning_content(messages: list[dict]) -> None:
+    """
+    Ensure all assistant messages have reasoning_content if any of them do.
+
+    DeepSeek R1 (thinking mode) requires that ALL assistant messages in the
+    conversation include a `reasoning_content` field if ANY of them have one.
+    Otherwise the API returns:
+        "Missing `reasoning_content` field in the assistant message"
+
+    This can happen when:
+    - Historical rounds are injected without reasoning_content
+    - A multi-turn tool loop has a turn where the model skips thinking
+
+    This function checks if any assistant message has reasoning_content,
+    and if so, adds an empty string to all that don't.
+
+    Args:
+        messages: The full conversation messages list (modified in-place).
+    """
+    has_any_reasoning = any(
+        msg.get("role") == "assistant" and "reasoning_content" in msg
+        for msg in messages
+    )
+
+    if not has_any_reasoning:
+        return
+
+    for msg in messages:
+        if msg.get("role") == "assistant" and "reasoning_content" not in msg:
+            msg["reasoning_content"] = ""
+
+
+# =============================================================================
 # Main Round Logic
 # =============================================================================
 
@@ -420,6 +456,11 @@ def run_round(
         # -- Notify dashboard that LLM is being called --
         if logger:
             logger.loading("[LLM] Calling model")
+
+        # -- Ensure reasoning_content consistency for thinking models --
+        # DeepSeek R1 requires ALL assistant messages to have reasoning_content
+        # if ANY of them do. Sanitize before each API call.
+        _ensure_reasoning_content(messages)
 
         # -- Call LLM via LiteLLM (streaming) --
         try:
