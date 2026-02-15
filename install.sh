@@ -183,9 +183,15 @@ echo ""
 # -- Step 3: Create virtual environment -------------------------------------
 info "Step 3/6: Setting up Python virtual environment..."
 
-if [ -d "venv" ]; then
+# Check if venv exists and is valid (has activate script)
+if [ -d "venv" ] && [ -f "venv/bin/activate" ]; then
     ok "Virtual environment already exists"
 else
+    # Remove incomplete venv if it exists
+    if [ -d "venv" ]; then
+        warn "Removing incomplete virtual environment..."
+        rm -rf venv
+    fi
     "$PYTHON_CMD" -m venv venv
     ok "Virtual environment created: $INSTALL_DIR/venv"
 fi
