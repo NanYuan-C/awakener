@@ -71,13 +71,13 @@ def main():
         load_dotenv(env_path)
 
     # -- Load configuration to get web server settings -------------------------
-    from server.config import ConfigManager
+    from server.config import ConfigManager, DEFAULTS
     config_manager = ConfigManager(project_dir)
     config = config_manager.load()
 
     # Command-line args override config file
-    host = args.host or config["web"].get("host", "0.0.0.0")
-    port = args.port or config["web"].get("port", 9120)
+    host = args.host or config["web"].get("host", DEFAULTS["web"]["host"])
+    port = args.port or config["web"].get("port", DEFAULTS["web"]["port"])
 
     # -- Print startup banner --------------------------------------------------
     print()

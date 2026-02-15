@@ -36,6 +36,7 @@ from activator.tools import ToolExecutor, detect_host_env
 from activator.context import build_system_message, build_context_messages
 from activator.agent import run_round
 from activator.snapshot import update_snapshot, SnapshotUpdateError
+from server.config import DEFAULTS
 
 
 # =============================================================================
@@ -349,7 +350,7 @@ def run_activation_loop(
 
     # Include the web server port so the agent can't probe it
     web_config = config.get("web", {})
-    host_env["server_port"] = web_config.get("port", 9120)
+    host_env["server_port"] = web_config.get("port", DEFAULTS["web"]["port"])
 
     logger.info(f"[START] Activator started | Model: {model} | Home: {agent_home}")
     if host_env:
