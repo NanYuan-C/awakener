@@ -77,7 +77,7 @@ def main():
 
     # Command-line args override config file
     host = args.host or config["web"].get("host", "0.0.0.0")
-    port = args.port or config["web"].get("port", 39120)
+    port = args.port or config["web"].get("port", 9120)
 
     # -- Print startup banner --------------------------------------------------
     print()

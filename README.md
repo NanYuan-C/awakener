@@ -101,7 +101,7 @@ python app.py
 
 > **Note**: The version number in `python3.12-venv` must match your Python version. For example, Python 3.11 requires `python3.11-venv`.
 
-After starting, visit `http://your-server-ip:39120`. You'll be guided through a password setup on first visit. Configure API keys, models, and agent parameters in the **Settings** page — no need to edit config files manually.
+After starting, visit `http://your-server-ip:9120`. You'll be guided through a password setup on first visit. Configure API keys, models, and agent parameters in the **Settings** page — no need to edit config files manually.
 
 ### Running in Background
 

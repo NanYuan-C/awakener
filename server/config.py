@@ -26,7 +26,7 @@ from typing import Any
 # These ensure the application always has sensible defaults.
 DEFAULTS = {
     "web": {
-        "port": 39120,
+        "port": 9120,
         "host": "0.0.0.0",
     },
     "agent": {

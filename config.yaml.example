@@ -12,10 +12,10 @@
 # -- Web Server ---------------------------------------------------------------
 # The management console web server configuration.
 web:
-  # Port number for the web console (default: 39120)
-  # A high, uncommon port is used by default to avoid conflicts
+  # Port number for the web console (default: 9120)
+  # An uncommon port is used by default to avoid conflicts
   # with services the agent may create (which often use 8080, 3000, etc.)
-  port: 39120
+  port: 9120
 
   # Host binding address
   # Use "0.0.0.0" to allow external access, "127.0.0.1" for local only
