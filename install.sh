@@ -120,8 +120,11 @@ ok "pip: $("$PYTHON_CMD" -m pip --version 2>&1 | head -1)"
 # Check venv module
 # On Ubuntu/Debian, the venv module requires a version-specific package
 # e.g., python3.12-venv for Python 3.12
-if ! "$PYTHON_CMD" -m venv --help &> /dev/null; then
-    warn "venv module not found. Attempting to install..."
+# We test by actually trying to create a temporary venv to ensure it works
+VENV_TEST_DIR="/tmp/awakener-venv-test-$$"
+if ! "$PYTHON_CMD" -m venv "$VENV_TEST_DIR" &> /dev/null; then
+    rm -rf "$VENV_TEST_DIR"
+    warn "venv module not functional. Attempting to install..."
     if command -v apt-get &> /dev/null; then
         update_apt
         # Try version-specific package first (e.g., python3.12-venv),
@@ -129,10 +132,17 @@ if ! "$PYTHON_CMD" -m venv --help &> /dev/null; then
         VENV_PKG="python${PY_MAJOR}.${PY_MINOR}-venv"
         info "Installing $VENV_PKG ..."
         apt-get install -y -qq "$VENV_PKG" 2>/dev/null || apt-get install -y -qq python3-venv
+        
+        # Test again after installation
+        if ! "$PYTHON_CMD" -m venv "$VENV_TEST_DIR" &> /dev/null; then
+            rm -rf "$VENV_TEST_DIR"
+            error "Failed to install python3-venv. Please install python${PY_MAJOR}.${PY_MINOR}-venv manually."
+        fi
     else
         error "Cannot install python3-venv. Please install it manually."
     fi
 fi
+rm -rf "$VENV_TEST_DIR"
 ok "venv module available"
 
 # Check git
