@@ -203,9 +203,12 @@ echo ""
 
 # -- Step 4: Install Python dependencies ------------------------------------
 info "Step 4/6: Installing Python dependencies..."
+echo ""
 
-pip install --upgrade pip -q
-pip install -r requirements.txt -q
+pip install --upgrade pip
+pip install -r requirements.txt
+
+echo ""
 ok "All dependencies installed"
 echo ""
 
