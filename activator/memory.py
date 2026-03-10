@@ -188,12 +188,17 @@ class MemoryManager:
 
     def _get_last_timeline_round(self) -> int:
         """
-        Get the highest round number from all timeline files.
+        Get the highest round number from today's timeline file only.
+
+        The round counter resets to 1 at midnight UTC each day, so only
+        today's file is consulted. This allows the agent to reason in
+        day-scoped units ("Round 3 today" rather than "Round 847 ever").
 
         Returns:
-            The last round number, or 0 if no entries exist.
+            The last round number recorded today, or 0 if none yet.
         """
-        entries = self._read_all_from_dir(self.timeline_dir, self._legacy_timeline)
+        today_path = os.path.join(self.timeline_dir, self._today_filename())
+        entries = self._read_jsonl_file(today_path)
         if not entries:
             return 0
         return max(e.get("round", 0) for e in entries)

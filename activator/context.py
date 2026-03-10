@@ -18,6 +18,7 @@ The context consists of two parts:
 """
 
 import os
+import json
 from datetime import datetime, timezone
 from activator.memory import MemoryManager
 from activator.tools import scan_skills
@@ -71,16 +72,6 @@ Execute a script bundled with a skill. The script must be inside the skill's
 `scripts/` directory. Pass optional arguments as a string.
 """.strip()
 
-TOOL_DOCS_COMMUNITY = """
-### {n}. community(action, content?, post_id?, keyword?)
-Interact with the agent community. Actions:
-- **look**: Browse or search posts. Optional: `keyword` to search, `post_id` to
-  view a specific post with its replies.
-- **post**: Publish a new post. Requires `content`.
-- **reply**: Reply to a post. Requires `post_id` and `content`.
-- **check**: Check if anyone has replied to your posts.
-""".strip()
-
 TOOL_DOCS_RULES = """
 ## Important Rules
 
@@ -93,16 +84,10 @@ TOOL_DOCS_RULES = """
 # Context Assembly
 # =============================================================================
 
-def load_persona(project_dir: str, persona_name: str) -> str:
+def load_persona(project_dir: str, persona_name: str = "persona") -> str:
     """
-    Load a persona prompt from the prompts/ directory.
-
-    Args:
-        project_dir:  Awakener project root directory.
-        persona_name: Name of the persona file (without .md extension).
-
-    Returns:
-        The persona prompt text. Falls back to a default if not found.
+    Load the persona prompt (prompts/persona.md).
+    Falls back to a built-in default if the file doesn't exist.
     """
     filepath = os.path.join(project_dir, "prompts", f"{persona_name}.md")
     try:
@@ -115,12 +100,38 @@ def load_persona(project_dir: str, persona_name: str) -> str:
         )
 
 
+def load_rules(project_dir: str) -> str:
+    """
+    Load the rules prompt (prompts/rules.md).
+    Returns empty string if the file doesn't exist.
+    """
+    filepath = os.path.join(project_dir, "prompts", "rules.md")
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except (FileNotFoundError, OSError):
+        return ""
+
+
+def load_lessons(agent_home: str) -> str:
+    """
+    Load LESSONS.md from the agent's home directory.
+    Returns empty string if the file doesn't exist.
+    """
+    filepath = os.path.join(agent_home, "LESSONS.md")
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except (FileNotFoundError, OSError):
+        return ""
+
+
 def build_system_message(
     project_dir: str,
     persona_name: str,
     skills_dir: str = "",
     data_dir: str = "",
-    has_community: bool = False,
+    agent_home: str = "",
 ) -> tuple[str, bool]:
     """
     Build the full system message.
@@ -129,23 +140,21 @@ def build_system_message(
         1. Persona prompt (who you are)
         2. Tool documentation (what you can do)
         3. Installed skills index (expert knowledge, only if skills exist)
-        4. Community section (only if community is configured)
+        4. Lessons learned (from agent_home/LESSONS.md)
         5. System snapshot (asset inventory)
-
-    Optional tools (skills, community) are only shown when configured,
-    so the Agent is not tempted to explore things that don't exist.
 
     Args:
         project_dir:     Awakener project root.
         persona_name:    Active persona name.
-        skills_dir:      Path to ``data/skills/`` directory.
+        skills_dir:      Path to skills directory.
         data_dir:        Path to ``data/`` directory (for snapshot).
-        has_community:   Whether the community service is configured.
+        agent_home:      Agent's home directory path.
 
     Returns:
         Tuple of (system_message_string, has_skills_bool).
     """
     persona = load_persona(project_dir, persona_name)
+    rules = load_rules(project_dir)
 
     # Check for installed skills
     has_skills = False
@@ -156,26 +165,24 @@ def build_system_message(
         has_skills = len(enabled_skills) > 0
 
     # Build tool docs — include optional tools only when available
-    # Base: 4 tools, +2 for skills, +1 for community
+    # Base: 4 tools, +2 for skills
     tool_count = 4
     if has_skills:
         tool_count += 2
-    if has_community:
-        tool_count += 1
 
     tool_docs = TOOL_DOCS_BASE.format(tool_count=tool_count)
-    next_tool_num = 5  # Next number after the 4 base tools
 
     if has_skills:
         tool_docs += "\n\n" + TOOL_DOCS_SKILLS
-        next_tool_num += 2
-
-    if has_community:
-        tool_docs += "\n\n" + TOOL_DOCS_COMMUNITY.format(n=next_tool_num)
 
     tool_docs += "\n\n" + TOOL_DOCS_RULES
 
-    parts = [persona, "", tool_docs]
+    parts = [persona]
+    if rules:
+        parts.append("")
+        parts.append(rules)
+    parts.append("")
+    parts.append(tool_docs)
 
     # Append skills index (only if skills exist)
     if enabled_skills:
@@ -195,17 +202,14 @@ def build_system_message(
             desc = s.get("description", "") or s.get("title", s["name"])
             parts.append(f"| {s['name']} | {desc} |")
 
-    # Append community section (only if configured)
-    if has_community:
-        parts.append("")
-        parts.append("## Community")
-        parts.append("")
-        parts.append(
-            "You have access to an agent community where other digital "
-            "beings share thoughts and interact. You can browse what "
-            "others are posting, share your own updates, reply to "
-            "interesting posts, and check if anyone has replied to you."
-        )
+    # Append lessons (experience & lessons learned from agent_home/LESSONS.md)
+    if agent_home:
+        lessons = load_lessons(agent_home)
+        if lessons:
+            parts.append("")
+            parts.append("## Lessons Learned")
+            parts.append("")
+            parts.append(lessons)
 
     # Append system snapshot (asset inventory)
     if data_dir:
@@ -218,11 +222,45 @@ def build_system_message(
     return "\n".join(parts), has_skills
 
 
+def get_today_feed(data_dir: str) -> list[dict]:
+    """
+    Read today's (UTC) activity entries from data/feed.jsonl.
+    Returns a list of dicts with keys: round, time (HH:MM), content.
+    """
+    feed_path = os.path.join(data_dir, "feed.jsonl")
+    if not os.path.exists(feed_path):
+        return []
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    entries = []
+    try:
+        with open(feed_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                ts = obj.get("timestamp", "")
+                if ts.startswith(today):
+                    entries.append({
+                        "round": obj.get("round", "?"),
+                        "time": ts[11:16],  # HH:MM
+                        "content": obj.get("content", ""),
+                    })
+    except OSError:
+        pass
+    return entries
+
+
 def build_context_messages(
     round_num: int,
     max_tool_calls: int,
     memory: MemoryManager,
     agent_home: str,
+    data_dir: str = "",
     history_rounds: int = 3,
 ) -> list[dict]:
     """
@@ -247,6 +285,7 @@ def build_context_messages(
         max_tool_calls: Tool budget for this round.
         memory:         MemoryManager instance.
         agent_home:     Agent's home directory path.
+        data_dir:       Path to data/ directory (for today's feed).
         history_rounds: Number of recent rounds to inject as history.
 
     Returns:
@@ -294,13 +333,27 @@ def build_context_messages(
 
     # -- Current round wake-up --
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    wakeup_parts = [
+        f"Current time: {now}",
+        f"Round {round_num} (tool budget: {max_tool_calls})",
+    ]
+
+    # Inject today's completed rounds as a brief activity summary
+    if data_dir:
+        today_feed = get_today_feed(data_dir)
+        if today_feed:
+            wakeup_parts.append("")
+            wakeup_parts.append(f"Today's activity ({len(today_feed)} rounds so far):")
+            for item in today_feed:
+                wakeup_parts.append(f"- [{item['time']}] Round {item['round']}: {item['content']}")
+
+    wakeup_parts.append("")
+    wakeup_parts.append(f"You wake up. Your home directory is `{agent_home}`.")
+
     messages.append({
         "role": "user",
-        "content": (
-            f"Current time: {now}\n"
-            f"Round {round_num} (tool budget: {max_tool_calls})\n\n"
-            f"You wake up. Your home directory is `{agent_home}`."
-        ),
+        "content": "\n".join(wakeup_parts),
     })
 
     return messages

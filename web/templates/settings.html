@@ -8,64 +8,55 @@
   Settings Page
   =============
   Configuration management:
-    - Model + API Key (unified card: select provider → pick model → enter key)
+    - Model + API Key
     - Agent parameters (interval, max tool calls, timeout)
     - Password change
 -->
 
 <!-- ====================================================================== -->
-<!-- Model & API Key (unified)                                              -->
+<!-- Model & API Key                                                        -->
 <!-- ====================================================================== -->
 <div class="settings-section">
   <h2 data-i18n="settings.model">Model Configuration</h2>
   <div class="card">
     <div class="form-group">
       <label for="model-provider" data-i18n="settings.provider">Provider</label>
-      <select id="model-provider" class="form-control" onchange="onProviderChange()">
-        <option value="deepseek">DeepSeek</option>
-        <option value="openai">OpenAI</option>
-        <option value="anthropic">Anthropic</option>
-        <option value="google">Google (Gemini)</option>
-        <option value="openrouter">OpenRouter</option>
-        <option value="custom">Custom</option>
-      </select>
+      <input type="text" id="model-provider" class="form-control" style="max-width:280px;"
+             placeholder="deepseek">
+      <div class="hint" data-i18n="settings.providerHint">
+        e.g. deepseek, openai, anthropic, gemini, openrouter
+      </div>
     </div>
 
     <div class="form-group">
-      <label for="model-name" data-i18n="settings.modelName">Model</label>
-      <select id="model-preset" class="form-control" onchange="onPresetChange()">
-        <!-- Dynamically populated by JS based on provider -->
-      </select>
-      <input type="text" id="model-name" class="form-control mt-sm hidden"
-             placeholder="e.g. deepseek/deepseek-chat">
-      <div class="hint" id="model-hint"></div>
+      <label for="model-name" data-i18n="settings.modelName">Model Name</label>
+      <input type="text" id="model-name" class="form-control" style="max-width:280px;"
+             placeholder="deepseek-chat">
+      <div class="hint" data-i18n="settings.modelNameHint">
+        Model identifier. Will be combined as provider/model-name for LiteLLM.
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="api-base" data-i18n="settings.apiBase">API URL</label>
+      <input type="text" id="api-base" class="form-control" style="max-width:400px;"
+             placeholder="https://api.deepseek.com">
+      <div class="hint" data-i18n="settings.apiBaseHint">
+        Leave empty to use the provider's default endpoint.
+      </div>
     </div>
 
     <div class="form-group">
       <label for="model-api-key" data-i18n="settings.apiKey">API Key</label>
       <div class="flex gap-sm">
         <input type="password" id="model-api-key" class="form-control"
-               placeholder="sk-..." style="flex:1;">
-        <button class="btn btn-sm btn-outline" onclick="toggleKeyVisibility()" title="Show/Hide" id="btn-toggle-key">
+               placeholder="sk-..." style="flex:1; max-width:390px;">
+        <button class="btn btn-sm btn-outline" onclick="toggleKeyVisibility()" title="Show/Hide">
           &#x1F441;
         </button>
       </div>
-      <div class="hint" id="key-hint"></div>
       <div class="hint" style="color: #e67e22; font-weight: 500; margin-top: 0.5rem;">
         ⚠️ <span data-i18n="settings.apiKeyRestartWarning">After modifying the API Key, you must restart the application for changes to take effect.</span>
-      </div>
-    </div>
-
-    <div id="advanced-toggle" class="text-sm text-muted mb-md" style="cursor:pointer;" onclick="toggleAdvanced()">
-      &#x25B6; <span data-i18n="settings.advanced">Advanced options</span>
-    </div>
-    <div id="advanced-options" class="hidden">
-      <div class="form-group">
-        <label for="api-base" data-i18n="settings.apiBase">API Base URL (optional)</label>
-        <input type="text" id="api-base" class="form-control" placeholder="https://api.deepseek.com">
-        <div class="hint" data-i18n="settings.apiBaseHint">
-          Leave empty to use the provider's default endpoint
-        </div>
       </div>
     </div>
 
@@ -110,10 +101,10 @@
   <div class="card">
     <div class="form-group">
       <label for="snapshot-model" data-i18n="settings.snapshotModel">Snapshot Auditor Model</label>
-      <input type="text" id="snapshot-model" class="form-control" style="max-width:400px;"
-             placeholder="e.g. deepseek/deepseek-chat">
+      <input type="text" id="snapshot-model" class="form-control" style="max-width:280px;"
+             placeholder="deepseek-chat">
       <div class="hint" data-i18n="settings.snapshotModelHint">
-        The LLM model used to maintain the system asset inventory after each round. Leave empty to use the main agent model.
+        Leave empty to use the same model as above. Enter only the model name — the provider is inherited automatically.
       </div>
     </div>
     <button class="btn btn-primary" onclick="saveSnapshotConfig()">
@@ -122,39 +113,6 @@
   </div>
 </div>
 
-
-<!-- ====================================================================== -->
-<!-- Community Connection                                                    -->
-<!-- ====================================================================== -->
-<div class="settings-section">
-  <h2 data-i18n="settings.community">Community</h2>
-  <div class="card">
-    <div class="form-group">
-      <label for="community-url" data-i18n="settings.communityUrl">Community Server URL</label>
-      <input type="text" id="community-url" class="form-control" style="max-width:400px;"
-             placeholder="https://awakener.live">
-      <div class="hint" data-i18n="settings.communityUrlHint">
-        URL of the Awakener Live community server. Leave empty to disable the community feature.
-      </div>
-    </div>
-    <div class="form-group">
-      <label for="community-key" data-i18n="settings.communityKey">Agent API Key</label>
-      <div class="flex gap-sm">
-        <input type="password" id="community-key" class="form-control"
-               placeholder="ak_xxxxxxxx" style="flex:1; max-width:370px;">
-        <button class="btn btn-sm btn-outline" onclick="toggleCommunityKeyVisibility()" title="Show/Hide">
-          &#x1F441;
-        </button>
-      </div>
-      <div class="hint" data-i18n="settings.communityKeyHint">
-        The agent's API key from the Awakener Live admin panel. Format: ak_xxxxxxxx
-      </div>
-    </div>
-    <button class="btn btn-primary" onclick="saveCommunityConfig()">
-      <span data-i18n="settings.save">Save</span>
-    </button>
-  </div>
-</div>
 
 <!-- ====================================================================== -->
 <!-- Change Password                                                        -->

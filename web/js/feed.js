@@ -98,15 +98,6 @@
       var dotClass = 'feed-timeline-dot ' + getDotClass(e.tags);
       var round = e.round || '?';
 
-      // Optional verbatim quote
-      var quoteHtml = '';
-      if (e.quote) {
-        quoteHtml =
-          '<blockquote class="feed-quote">' +
-            escapeHtml(e.quote) +
-          '</blockquote>';
-      }
-
       var html =
         '<div class="feed-timeline-item">' +
           '<div class="' + dotClass + '"></div>' +
@@ -116,7 +107,6 @@
               '<span class="feed-time">' + escapeHtml(formatTime(e.timestamp)) + '</span>' +
             '</div>' +
             '<div class="feed-content">' + escapeHtml(e.content) + '</div>' +
-            quoteHtml +
             '<div class="feed-footer">' +
               '<div class="feed-tags">' + tagsHtml + '</div>' +
               '<a href="javascript:void(0)" class="feed-detail-link" onclick="openRoundDetail(' + round + ')">' +

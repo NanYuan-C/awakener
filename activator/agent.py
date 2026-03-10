@@ -410,9 +410,9 @@ def run_round(
     tool_executor: ToolExecutor,
     model: str,
     api_key: str | None = None,
+    api_base: str = "",
     normal_limit: int = 20,
     has_skills: bool = True,
-    has_community: bool = False,
     logger=None,
     tool_callback: Callable[[int], None] | None = None,
 ) -> RoundResult:
@@ -435,11 +435,10 @@ def run_round(
         tool_executor:  ToolExecutor instance with safety checks.
         model:          LiteLLM model identifier (e.g. "deepseek/deepseek-chat").
         api_key:        Optional API key override.
+        api_base:       Optional custom API base URL (e.g. for local models).
         normal_limit:   Normal tool budget per round.
         has_skills:     Whether skills are installed.  When False,
                         skill tools are excluded from the schema.
-        has_community:  Whether community is configured.  When False,
-                        the community tool is excluded from the schema.
         logger:         Logger callback object (must have info, loading,
                         tool_call, tool_result, thought_chunk,
                         thought_done methods).
@@ -464,14 +463,17 @@ def run_round(
 
         # -- Call LLM via LiteLLM (streaming) --
         try:
-            response = litellm.completion(
+            kwargs = dict(
                 model=model,
                 messages=messages,
-                tools=get_tools_schema(has_skills, has_community),
+                tools=get_tools_schema(has_skills),
                 tool_choice="auto",
                 api_key=api_key,
                 stream=True,
             )
+            if api_base:
+                kwargs["api_base"] = api_base
+            response = litellm.completion(**kwargs)
         except Exception as e:
             error_msg = f"LLM API error: {type(e).__name__}: {e}"
             if logger:

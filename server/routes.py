@@ -295,17 +295,21 @@ def create_router(
         return {"message": "Inspiration sent to agent"}
 
     # =========================================================================
-    # PROMPT ROUTE - Single global prompt (default.md)
+    # PROMPT ROUTES - persona.md and rules.md
     # =========================================================================
 
-    @router.get("/prompt", dependencies=[auth])
-    async def get_prompt():
+    _ALLOWED_PROMPTS = {"persona", "rules"}
+
+    @router.get("/prompt/{name}", dependencies=[auth])
+    async def get_prompt(name: str):
         """
-        Get the content of the global agent prompt (prompts/default.md).
-        There is only one prompt file — no switching or listing.
+        Get a prompt file by name. Supported: 'persona', 'rules'.
         """
+        if name not in _ALLOWED_PROMPTS:
+            raise HTTPException(status_code=404, detail=f"Unknown prompt: {name}")
+
         prompts_dir = config_manager.get_prompts_dir()
-        filepath = os.path.join(prompts_dir, "default.md")
+        filepath = os.path.join(prompts_dir, f"{name}.md")
 
         if not os.path.exists(filepath):
             return {"content": ""}
@@ -315,19 +319,22 @@ def create_router(
 
         return {"content": content}
 
-    @router.put("/prompt", dependencies=[auth])
-    async def update_prompt(req: PromptContentRequest):
+    @router.put("/prompt/{name}", dependencies=[auth])
+    async def update_prompt(name: str, req: PromptContentRequest):
         """
-        Update the global agent prompt (prompts/default.md).
+        Update a prompt file by name. Supported: 'persona', 'rules'.
         """
+        if name not in _ALLOWED_PROMPTS:
+            raise HTTPException(status_code=404, detail=f"Unknown prompt: {name}")
+
         prompts_dir = config_manager.get_prompts_dir()
         os.makedirs(prompts_dir, exist_ok=True)
-        filepath = os.path.join(prompts_dir, "default.md")
+        filepath = os.path.join(prompts_dir, f"{name}.md")
 
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(req.content)
 
-        return {"message": "Prompt saved"}
+        return {"message": f"Prompt '{name}' saved"}
 
     # =========================================================================
     # SKILL MANAGEMENT ROUTES - Requires authentication
@@ -336,13 +343,13 @@ def create_router(
     @router.get("/skills", dependencies=[auth])
     async def list_skills():
         """
-        List all installed skills from data/skills/ directory.
+        List all installed skills from {agent_home}/skills/ directory.
         Each skill has a SKILL.md with YAML frontmatter metadata.
         Returns name, title, description, tags, enabled status.
         """
         from activator.tools import scan_skills
 
-        skills_dir = os.path.join(config_manager.project_dir, "data", "skills")
+        skills_dir = os.path.join(config_manager.load().get("agent", {}).get("home", "/home/agent"), "skills")
         skills = scan_skills(skills_dir)
         return {"skills": skills}
 
@@ -354,7 +361,7 @@ def create_router(
         """
         from activator.tools import _parse_skill_frontmatter
 
-        skills_dir = os.path.join(config_manager.project_dir, "data", "skills")
+        skills_dir = os.path.join(config_manager.load().get("agent", {}).get("home", "/home/agent"), "skills")
         skill_path = os.path.join(skills_dir, name)
 
         if not os.path.isdir(skill_path):
@@ -403,7 +410,7 @@ def create_router(
         Update a skill's SKILL.md content.
         If the skill directory doesn't exist, it is created.
         """
-        skills_dir = os.path.join(config_manager.project_dir, "data", "skills")
+        skills_dir = os.path.join(config_manager.load().get("agent", {}).get("home", "/home/agent"), "skills")
         skill_path = os.path.join(skills_dir, name)
         os.makedirs(skill_path, exist_ok=True)
 
@@ -424,7 +431,7 @@ def create_router(
         - A SKILL.md file is included
         - SKILL.md frontmatter contains 'name' and 'description'
 
-        All files are written to data/skills/<name>/.
+        All files are written to {agent_home}/skills/<name>/.
         """
         from activator.tools import _parse_skill_frontmatter
 
@@ -439,7 +446,7 @@ def create_router(
                 detail="Invalid skill name. Use lowercase letters, digits, and hyphens.",
             )
 
-        skills_dir = os.path.join(config_manager.project_dir, "data", "skills")
+        skills_dir = os.path.join(config_manager.load().get("agent", {}).get("home", "/home/agent"), "skills")
         skill_path = os.path.join(skills_dir, name)
 
         # Check for duplicate
@@ -536,7 +543,7 @@ def create_router(
         """
         from activator.tools import _load_skills_config, _save_skills_config
 
-        skills_dir = os.path.join(config_manager.project_dir, "data", "skills")
+        skills_dir = os.path.join(config_manager.load().get("agent", {}).get("home", "/home/agent"), "skills")
         skill_path = os.path.join(skills_dir, name)
 
         if not os.path.isdir(skill_path):
@@ -563,7 +570,7 @@ def create_router(
         Delete a skill and all its files.
         This permanently removes the skill directory.
         """
-        skills_dir = os.path.join(config_manager.project_dir, "data", "skills")
+        skills_dir = os.path.join(config_manager.load().get("agent", {}).get("home", "/home/agent"), "skills")
         skill_path = os.path.join(skills_dir, name)
 
         if not os.path.isdir(skill_path):

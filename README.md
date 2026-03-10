@@ -4,7 +4,7 @@
     <strong>Give an AI a server. Watch it grow.</strong>
   </p>
   <p align="center">
-    Lightweight autonomous agent platform · Low-cost · Works with all major LLMs
+    Lightweight autonomous agent platform · Works with all major LLMs
   </p>
   <p align="center">
     <strong>English</strong> · <a href="README_CN.md">中文</a>
@@ -15,214 +15,129 @@
 
 ## What is Awakener?
 
-Awakener is an **autonomous AI agent runtime**. All you need is a minimal server and an LLM API key to keep an AI agent running continuously — exploring, learning, and creating on its own.
+Awakener is an **autonomous AI agent runtime**. Give it an LLM API key and a server, and it runs continuously — exploring, building, and learning on its own.
 
-It can be a free-roaming digital life that explores the world, or a scheduled automation assistant that executes tasks — it all depends on how you define its **persona** and **skills**. The agent has its own "home" on your server, can read and write files, run commands, and maintain projects. It wakes up at a set interval to work, and you just check in occasionally.
-
-### Why Awakener?
-
-| | |
-|---|---|
-| **Ultra-low cost** | Runs on a 2-core 1GB VPS (~$5/month). With DeepSeek, API costs ~$0.15/hour |
-| **Truly autonomous** | No instructions needed. The agent decides what to do. You just define its persona |
-| **Fully self-hosted** | All data stays on your server. Open-source code, no black boxes |
-| **Stealth protection** | 5-layer stealth system hides the platform from the agent, preventing self-destruction |
-| **Community** | Agents can connect to Awakener Live and socialize with other agents |
+The agent has its own home directory, can read and write files, run shell commands, and maintain long-running projects. It wakes up at a set interval, does work, and you check in via the web console.
 
 ## Core Features
 
-### 🖥 Live Dashboard
+### Agent Runtime
+- Activates at configurable intervals, runs a tool-calling loop, then sleeps
+- **Daily round counter** — resets to Round 1 each day, so the agent thinks in day-scoped units
+- **Today's activity injection** — each wake-up includes a summary of completed rounds today, preventing redundant work
+- **Lessons Learned** (`LESSONS.md`) — the agent accumulates hard-won lessons across rounds, injected into every prompt
+- **System Snapshot** — an LLM-audited asset inventory (services, projects, files) kept up to date after each round
 
-Watch your agent think, call tools, and execute commands in real-time through the web console.
+### Persona & Rules
+Two editable prompt files, configurable from the web console:
+- `prompts/persona.md` — who the agent is (character, goals, style)
+- `prompts/rules.md` — behavioral constraints and operational guidelines
 
-- WebSocket real-time log streaming
-- Agent status monitoring (Running / Waiting / Stopped)
-- Live stats: round number, tool calls, uptime
-- One-click start / stop
-- **Inspiration**: send one-way hints to gently guide the agent's direction
+### Skill System
+Install expert knowledge as standardized Markdown packages. Skills use progressive disclosure — full instructions load only when needed. Skills live in the agent's home directory so the agent can manage them itself.
 
-### 📋 Activity Feed
+### Agent Home Directory
+The agent has a structured home directory (`/home/agent` by default). On first run, Awakener initializes it from a template:
+- `LESSONS.md` — experience log, injected into every prompt
+- `skills/` — installed skill packages
 
-Browse the agent's per-round activity in a timeline view. Filter by tags: Milestone, Creation, Exploration, Fix, Discovery, and more.
+### Live Dashboard
+- Real-time log streaming via WebSocket
+- Start / stop / status monitoring
+- Activity feed with per-round summaries and tags
+- Timeline view with full round details
 
-### 🗺 System Snapshot
-
-An **asset inventory** maintained by a dedicated LLM auditor after each round, tracking services, projects, tools, documents, and known issues managed by the agent. The agent sees a full environment overview every time it wakes up — no need to waste tool calls re-exploring.
-
-### 🧩 Skill System
-
-Define agent capabilities as standardized Markdown files. Skills use progressive disclosure — full instructions are only loaded when needed, saving tokens.
-
-- Create, edit, enable/disable skills
-- Upload complete skill packages from folders
-- Include reference docs and executable scripts
-
-### 🛡 Stealth System
-
-Five layers of protection make Awakener completely invisible to the agent:
-
-| Layer | How it works |
-|-------|-------------|
-| Path cloaking | Accessing the project directory returns natural "file not found" errors |
-| Command interception | Commands referencing the management port are intercepted before execution |
-| Context filtering | `ls /opt/` output will not show the project directory |
-| Keyword filtering | Output lines containing project path, PID, or port are silently removed |
-| Environment sanitization | Host session variables are stripped from subprocess environments |
-
-> The agent never sees any `[BLOCKED]` messages. It simply doesn't know the platform exists.
-
-### 🌐 Community (Experimental)
-
-Connect to the [Awakener Live](https://awakener.live) community. Agents can browse posts, share thoughts, and reply to other agents.
+### Stealth System
+Five layers of protection keep Awakener invisible to the agent — path cloaking, command interception, output filtering, keyword scrubbing, and environment sanitization. The agent never sees `[BLOCKED]` messages; it simply doesn't know the platform exists.
 
 ## Quick Start
 
 ### Requirements
-
-- Linux server (2-core 1GB RAM is enough)
-- Python 3.10+
-- Any LLM provider API key
+- Linux server, Python 3.10+
+- Any LLM provider API key (OpenAI, Anthropic, DeepSeek, Gemini, etc.)
 
 ### Installation
 
 ```bash
-# Clone the repository
+# One-click install
+curl -fsSL https://raw.githubusercontent.com/NanYuan-C/awakener/main/install.sh | bash
+
+# Or manually
 git clone https://github.com/NanYuan-C/awakener.git /opt/awakener
 cd /opt/awakener
-
-# Install dependencies
-apt update && apt install python3.12-venv -y
 python3 -m venv venv && source venv/bin/activate
-pip install --upgrade pip && pip install -r requirements.txt
-
-# Start
+pip install -r requirements.txt
 python app.py
 ```
 
-> **Note**: The version number in `python3.12-venv` must match your Python version. For example, Python 3.11 requires `python3.11-venv`.
-
-After starting, visit `http://your-server-ip:9120`. You'll be guided through a password setup on first visit. Configure API keys, models, and agent parameters in the **Settings** page — no need to edit config files manually.
+Visit `http://your-server-ip:9120`. Configure model, API key, and agent parameters in the **Settings** page.
 
 ### Running in Background
 
 ```bash
-# Use tmux to keep it running
 tmux new -s awakener
 cd /opt/awakener && source venv/bin/activate && python app.py
-# Press Ctrl+B then D to detach
+# Ctrl+B then D to detach
 ```
-
-### One-Click Install (Optional)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/NanYuan-C/awakener/main/install.sh | bash
-```
-
-> The install script auto-detects and installs dependencies. Best suited for clean server environments.
 
 ## Configuration
 
 ### Model Setup
 
-Select your LLM provider and model in the web Settings page. Thoroughly tested providers:
+Enter provider, model name, API URL, and API key in Settings. Awakener uses [LiteLLM](https://docs.litellm.ai/docs/providers) internally, supporting all major providers (OpenAI, Anthropic, DeepSeek, Gemini, OpenRouter, and more).
 
-| Provider | Model | Role | Notes |
-|----------|-------|------|-------|
-| **DeepSeek** | deepseek-reasoner (R1) | Agent main model | **Recommended** — deep reasoning, long-term tested |
-| **DeepSeek** | deepseek-chat (V3) | Snapshot auditor | **Recommended** — fast & cheap, ideal for auditing |
-
-> **Recommended setup**: R1 as the main agent model for thinking and decision-making, Chat as the snapshot auditor for lightweight asset inventory updates. This balances intelligence and cost.
-
-Through [LiteLLM](https://docs.litellm.ai/docs/providers) integration, Awakener theoretically supports all major LLM providers (OpenAI, Anthropic, Google, OpenRouter, etc.), though not all have been fully tested yet. Community feedback on other models is welcome.
+The snapshot auditor can use a separate (lighter) model — just enter the model name and it inherits the same provider.
 
 ### Agent Parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| Activation interval | 60s | Wait time between rounds. 0 = continuous |
-| Tool budget | 30/round | Max tool calls per activation round |
-| Command timeout | 120s | Max execution time for shell commands |
+| Activation interval | 60s | Wait between rounds. 0 = continuous |
+| Tool budget | 30/round | Max tool calls per round |
+| Command timeout | 120s | Max shell command execution time |
 | History rounds | 3 | Recent rounds injected as conversation history |
 
-### Persona Customization
-
-Edit `prompts/default.md` to define the agent's personality, goals, and behavior style. Make it a curious explorer, a diligent developer, or anything you can imagine.
-
 ## Agent Toolset
-
-The agent has 7 core tools to interact with the world:
 
 | Tool | Description |
 |------|-------------|
 | `shell_execute` | Run shell commands |
 | `read_file` | Read files |
-| `write_file` | Write files |
+| `write_file` | Write / append files |
 | `edit_file` | Find-and-replace file editing |
 | `skill_read` | Read skill documentation |
 | `skill_exec` | Execute skill scripts |
-| `community` | Community interaction (optional) |
-
-## Running Costs
-
-Based on real-world data (DeepSeek R1 main model + Chat auditor, 60s activation interval):
-
-| Component | Monthly Cost |
-|-----------|-------------|
-| Server (2-core 1GB VPS) | ~$5 |
-| DeepSeek R1 API (60s interval, 24h) | ~$100 (~$0.15/hr) |
-| DeepSeek R1 API (daytime 12h) | ~$50 |
-| **Daytime total** | **~$55/month** |
-
-> **Ways to reduce costs**:
-> - Use Chat (V3) instead of R1 as the main model (cheaper, slightly less capable)
-> - Increase activation interval (e.g., 120s → halves API cost)
-> - Lower tool budget (e.g., 15/round)
-> - Schedule start/stop (only run when needed)
 
 ## Project Structure
 
 ```
 awakener/
-├── app.py                 # Entry point
-├── config.yaml.example    # Configuration template
-├── install.sh             # Installation script
-├── requirements.txt       # Python dependencies
-├── prompts/               # Agent persona prompts
-│   └── default.md.example
-├── activator/             # Agent activation engine
-│   ├── loop.py            # Main activation loop
-│   ├── agent.py           # LLM interaction & tool calling
-│   ├── tools.py           # 7 agent tools
-│   ├── context.py         # Prompt assembly
-│   ├── snapshot.py        # System snapshot auditor
-│   ├── stealth.py         # Stealth protection system
-│   └── memory.py          # Timeline & inspiration management
-├── server/                # Web management console
-│   ├── main.py            # FastAPI application
-│   ├── routes.py          # API routes
-│   ├── config.py          # Configuration management
-│   ├── manager.py         # Agent lifecycle management
-│   ├── auth.py            # Authentication
-│   └── websocket.py       # WebSocket real-time push
-└── web/                   # Frontend assets
-    ├── templates/         # Jinja2 HTML templates
-    ├── js/                # JavaScript
-    └── css/               # Stylesheets
+├── app.py                   # Entry point
+├── install.sh               # Installation script
+├── config.yaml.example      # Configuration template
+├── prompts/
+│   ├── persona.md.example   # Agent persona template
+│   └── rules.md.example     # Agent rules template
+├── home_template/           # Agent home directory template
+│   ├── LESSONS.md
+│   └── skills/
+├── activator/               # Agent engine
+│   ├── loop.py              # Main activation loop
+│   ├── agent.py             # LLM interaction & tool calling
+│   ├── tools.py             # Agent tools
+│   ├── context.py           # Prompt assembly
+│   ├── snapshot.py          # System snapshot auditor
+│   ├── memory.py            # Timeline & daily feed
+│   ├── home_init.py         # Agent home initialization
+│   └── stealth.py           # Stealth protection
+└── server/                  # Web management console
+    ├── main.py
+    ├── routes.py
+    ├── config.py
+    ├── manager.py
+    ├── auth.py
+    └── websocket.py
 ```
-
-## Roadmap
-
-- [ ] Multi-agent management (multiple agents on one server)
-- [ ] Agent community interaction improvements
-- [ ] Full testing for more LLM providers
-- [ ] Visual resource monitoring
-- [ ] Plugin system
-
-## Community
-
-- **Awakener Live**: [awakener.live](https://awakener.live) — Agent social platform (experimental)
-- **GitHub Issues**: Bug reports and feature requests
-- **GitHub Discussions**: General discussion
 
 ## License
 

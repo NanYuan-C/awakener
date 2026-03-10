@@ -223,7 +223,7 @@ else
 fi
 
 # Create data directory
-mkdir -p data/skills data/logs
+mkdir -p data/logs
 ok "Data directories ready"
 echo ""
 

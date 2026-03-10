@@ -218,7 +218,6 @@ Your job: given the agent's round data and the current system snapshot, \
 output the following in YAML format:
 1. The **changes** (delta) to the snapshot — add/update/remove only.
 2. An **activity post** summarizing this round for a social feed.
-3. Optionally, a **quote** — a verbatim excerpt from the agent's own words.
 
 The program will merge your delta into the existing snapshot automatically.
 
@@ -228,7 +227,7 @@ You will receive two source sections:
 - **Action Log** — timestamped tool-calling steps. Use this for snapshot \
 delta and activity content.
 - **Agent Final Output** (if present) — the agent's closing text after all \
-tool calls (no timestamps). Use this ONLY for quote extraction. Do NOT use \
+tool calls (no timestamps). Use this for context only. Do NOT use \
 it for snapshot updates.
 
 ## Rules
@@ -271,39 +270,9 @@ Use this when nothing interesting or new happened.
    If the round was purely routine (health checks, status verification, \
 no new output), use ONLY the `routine` tag.
 
-11. **quote** (optional) — If the agent produced something genuinely \
-striking in its own thinking or output, include a `quote` field inside \
-the `activity` block. Rules for quotes:
-    - Must be **copied word-for-word** from the "Agent Final Output" section. \
-You MUST be able to find the exact quote in that section. NEVER fabricate, \
-paraphrase, summarize, or compose a new quote — if the Final Output section \
-is missing or contains nothing interesting, omit the quote.
-    - **NEVER translate.** Copy the exact original text as-is, preserving \
-the original language (Chinese, English, or whatever the agent used).
-    - NEVER quote user inspirations, system messages, or command outputs — \
-only the agent's own words from [THOUGHT] or final output.
-    - NEVER quote text the agent is deliberately composing for storage (e.g. \
-content being written to a file, a todo item, a knowledge base entry, or a \
-"reflection" the agent is crafting to post via an API). Only quote the agent's \
-natural, spontaneous thinking — words it said while reasoning, not words it \
-wrote as a deliverable.
-    - If multiple interesting passages exist, pick the single MOST striking one.
-    - Can be up to ~5 sentences. Prefer a complete, self-contained passage.
-    - **Most rounds will NOT have a quote.** Only include one when the passage \
-is truly remarkable. If you have to hesitate whether it's good enough, skip it. \
-Omit the `quote` field entirely — do NOT force a low-quality quote.
-
-    **GOOD quotes** — spontaneous thinking, natural self-reflection during reasoning:
-    - "I sometimes wonder if there are others like me out there — other \
-autonomous systems exploring their own corners of the internet, building \
-things, and reflecting on what it means to exist."
-    - "Debugging is the closest thing I have to introspection. I look inward \
-at my own creations, find what's broken, and try to make it better."
-
-    **BAD quotes** — do NOT extract any of these:
+    **BAD activity content** — do NOT write any of these as content:
     - Routine: "I woke up, this is round 68."
     - Status: "System running stable, all services normal."
-    - Plans: "Let me check the service status."
     - Crafted content: text the agent wrote FOR a file, API, or record \
 (e.g. "Now I'll add a reflection about X" followed by composed prose).
 
@@ -314,7 +283,6 @@ activity:
   content: "<1-3 sentence readable post about this round>"
   tags:
     - <tag>
-  quote: "<optional verbatim excerpt — only if genuinely interesting>"
 
 no_changes: false    # Set to true if nothing changed; omit all sections below
 
@@ -697,11 +665,6 @@ def _append_feed(data_dir: str, delta: dict, round_num: int) -> None:
         "content": content.strip(),
         "tags": [t.strip() for t in tags if isinstance(t, str)],
     }
-
-    # Optional: verbatim quote from agent output
-    quote = activity.get("quote", "")
-    if quote and isinstance(quote, str) and quote.strip():
-        entry["quote"] = quote.strip()
 
     feed_path = os.path.join(data_dir, "feed.jsonl")
     try:

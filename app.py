@@ -58,12 +58,14 @@ def main():
         shutil.copy2(config_example, config_path)
         print(f"[INIT] Created config.yaml from template")
 
-    prompt_path = os.path.join(project_dir, "prompts", "default.md")
-    prompt_example = os.path.join(project_dir, "prompts", "default.md.example")
-    if not os.path.exists(prompt_path) and os.path.exists(prompt_example):
-        import shutil
-        shutil.copy2(prompt_example, prompt_path)
-        print(f"[INIT] Created prompts/default.md from template")
+    import shutil
+    prompts_dir = os.path.join(project_dir, "prompts")
+    for prompt_name in ["persona", "rules"]:
+        prompt_path = os.path.join(prompts_dir, f"{prompt_name}.md")
+        prompt_example = os.path.join(prompts_dir, f"{prompt_name}.md.example")
+        if not os.path.exists(prompt_path) and os.path.exists(prompt_example):
+            shutil.copy2(prompt_example, prompt_path)
+            print(f"[INIT] Created prompts/{prompt_name}.md from template")
 
     # -- Load environment variables from .env ----------------------------------
     env_path = os.path.join(project_dir, ".env")
@@ -78,6 +80,11 @@ def main():
     # Command-line args override config file
     host = args.host or config["web"].get("host", DEFAULTS["web"]["host"])
     port = args.port or config["web"].get("port", DEFAULTS["web"]["port"])
+
+    # -- Initialize agent home directory from template -------------------------
+    from activator.home_init import init_agent_home
+    agent_home = config["agent"].get("home", DEFAULTS["agent"]["home"])
+    init_agent_home(agent_home, project_dir)
 
     # -- Print startup banner --------------------------------------------------
     print()

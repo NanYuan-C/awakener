@@ -38,10 +38,6 @@ DEFAULTS = {
         "shell_timeout": 120,
         "max_output_chars": 4000,
         "history_rounds": 3,
-        "community": {
-            "url": "",
-            "key": "",
-        },
     },
 }
 

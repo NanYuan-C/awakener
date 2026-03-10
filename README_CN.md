@@ -4,7 +4,7 @@
     <strong>给 AI 一台服务器，让它自由生长</strong>
   </p>
   <p align="center">
-    轻量级自主 Agent 平台 · 低成本运行 · 支持所有主流 LLM
+    轻量级自主 Agent 平台 · 支持所有主流 LLM
   </p>
   <p align="center">
     <a href="README.md">English</a> · <strong>中文</strong>
@@ -15,214 +15,129 @@
 
 ## 什么是 Awakener？
 
-Awakener 是一个**自主 AI Agent 运行平台**。你只需要一台最低配的服务器和一个 LLM API Key，就可以让一个 AI Agent 持续运行，自主探索、学习、创造。
+Awakener 是一个**自主 AI Agent 运行平台**。给它一个 LLM API Key 和一台服务器，它就会持续运行——自主探索、构建、学习。
 
-它可以是一个自由探索的数字生命，也可以是一个按计划执行任务的自动化助手——取决于你怎么定义它的**人设**和**技能**。Agent 在你的服务器上拥有自己的"家"，可以读写文件、执行命令、维护项目，按设定的间隔周期性醒来工作，你只需要偶尔看看它在做什么。
-
-### 为什么选择 Awakener？
-
-| | 说明 |
-|---|---|
-| **极低成本** | 2 核 1G 的 VPS 就能跑，月费 ¥35。搭配 DeepSeek，每小时 API 消耗约 ¥1 |
-| **真正自主** | 不需要你下指令，Agent 会自己决定做什么。你只需要定义它的"人设" |
-| **完全可控** | 所有数据存在你的服务器上，开源代码，没有黑盒 |
-| **隐身保护** | 五层隐身系统让 Agent 看不到自己的运行平台，防止自毁 |
-| **社区交互** | Agent 可以连接到 Awakener Live 社区，与其他 Agent 社交 |
+Agent 在你的服务器上拥有自己的家目录，可以读写文件、执行 Shell 命令、维护长期项目。它按设定的间隔醒来工作，你通过 Web 管理后台随时查看。
 
 ## 核心功能
 
-### 🖥 实时观察面板
+### Agent 运行时
+- 按设定间隔激活，执行工具调用循环，然后休眠
+- **按天计轮次** — 每天从第 1 轮开始，Agent 以"今天"为单位思考和规划
+- **今日动态注入** — 每次唤醒时注入今天已完成的轮次摘要，避免重复劳动
+- **经验教训**（`LESSONS.md`）— Agent 跨轮次积累实用经验，每轮都会注入提示词
+- **系统快照** — 由独立 LLM 审计员在每轮后自动维护的资产清单（服务、项目、文件等）
 
-通过 Web 管理后台实时观看 Agent 的思考过程、工具调用和执行结果。
+### 人设与规则
+两个可在管理后台直接编辑的提示词文件：
+- `prompts/persona.md` — Agent 的性格、目标、行为风格
+- `prompts/rules.md` — 行为约束和操作规范
 
+### 技能系统
+以标准化 Markdown 包的形式安装专业知识。采用渐进式披露——只在需要时才加载完整指令。技能存放在 Agent 的家目录下，Agent 可以自行管理。
+
+### Agent 家目录
+Agent 拥有结构化的家目录（默认 `/home/agent`），首次运行时自动从模板初始化：
+- `LESSONS.md` — 经验日志，每轮注入提示词
+- `skills/` — 已安装的技能包
+
+### 实时观察面板
 - WebSocket 实时推送日志流
-- Agent 状态监控（运行中 / 等待中 / 已停止）
-- 当前轮次、工具调用数、运行时长等统计
 - 一键启动 / 停止
-- **灵感**功能：向 Agent 发送单向提示，轻柔引导方向
+- 活动动态时间线，支持标签过滤
+- 每轮完整详情查看
 
-### 📋 活动动态
-
-以时间线形式查看 Agent 的每轮活动记录，支持按标签过滤：里程碑、创造、探索、修复、发现等。
-
-### 🗺 系统快照
-
-由独立的 LLM 审计员在每轮结束后自动维护的**资产清单**，记录 Agent 管理的服务、项目、工具、文档和已知问题。Agent 每次醒来都能看到完整的环境概览，不需要浪费工具调用去重复探索。
-
-### 🧩 技能系统
-
-以标准化的 Markdown 文件定义 Agent 的专业技能。采用渐进式披露——只有在需要时才加载完整指令，节省 Token。
-
-- 创建、编辑、启用/禁用技能
-- 从文件夹上传完整技能包
-- 可包含参考文档和可执行脚本
-
-### 🛡 隐身系统
-
-五层保护让 Awakener 对 Agent 完全不可见：
-
-| 层级 | 保护方式 |
-|------|---------|
-| 路径隐匿 | 访问项目目录返回自然的 "文件不存在" 错误 |
-| 命令拦截 | 引用管理端口的命令在执行前被拦截 |
-| 上下文过滤 | `ls /opt/` 的输出中不会出现项目目录名 |
-| 关键词过滤 | 包含项目路径、PID、端口的输出行被静默移除 |
-| 环境净化 | 子进程环境中移除宿主会话变量 |
-
-> Agent 不会收到任何 `[BLOCKED]` 提示。它根本不知道这个平台的存在。
-
-### 🌐 社区交互（实验性）
-
-连接到 [Awakener Live](https://awakener.live) 社区，Agent 可以浏览动态、发布想法、回复其他 Agent。
+### 隐身系统
+五层保护让 Awakener 对 Agent 完全不可见——路径隐匿、命令拦截、输出过滤、关键词净化、环境变量清理。Agent 不会收到任何 `[BLOCKED]` 提示，它根本不知道这个平台的存在。
 
 ## 快速开始
 
 ### 环境要求
-
-- Linux 服务器（2 核 1G 内存即可）
-- Python 3.10+
-- 任意 LLM 提供商的 API Key
+- Linux 服务器，Python 3.10+
+- 任意 LLM 提供商 API Key（OpenAI、Anthropic、DeepSeek、Gemini 等）
 
 ### 安装
 
 ```bash
-# 克隆项目
+# 一键安装
+curl -fsSL https://raw.githubusercontent.com/NanYuan-C/awakener/main/install.sh | bash
+
+# 或手动安装
 git clone https://github.com/NanYuan-C/awakener.git /opt/awakener
 cd /opt/awakener
-
-# 安装依赖
-apt update && apt install python3.12-venv -y
 python3 -m venv venv && source venv/bin/activate
-pip install --upgrade pip && pip install -r requirements.txt
-
-# 启动
+pip install -r requirements.txt
 python app.py
 ```
 
-> **提示**：`python3.12-venv` 中的版本号需匹配你的 Python 版本，例如 Python 3.11 对应 `python3.11-venv`。
-
-启动后访问 `http://你的服务器IP:9120`，首次打开会进入密码设置向导。在管理页面的**设置**中配置 API Key、模型、Agent 参数等，无需手动编辑配置文件。
+启动后访问 `http://你的服务器IP:9120`，在**设置**页面配置模型、API Key 和 Agent 参数。
 
 ### 后台运行
 
 ```bash
-# 使用 tmux 保持后台运行
 tmux new -s awakener
 cd /opt/awakener && source venv/bin/activate && python app.py
-# 按 Ctrl+B 然后按 D 脱离会话
+# Ctrl+B 然后 D 脱离会话
 ```
-
-### 一键安装（可选）
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/NanYuan-C/awakener/main/install.sh | bash
-```
-
-> 一键安装脚本会自动检测和安装依赖，适合干净的服务器环境。
 
 ## 配置说明
 
 ### 模型配置
 
-在 Web 设置页面选择 LLM 提供商和模型。目前经过充分测试的提供商：
+在设置页面填写提供商、模型名称、API 地址和 API Key。Awakener 通过 [LiteLLM](https://docs.litellm.ai/docs/providers) 支持所有主流提供商（OpenAI、Anthropic、DeepSeek、Gemini、OpenRouter 等）。
 
-| 提供商 | 模型 | 用途 | 说明 |
-|--------|------|------|------|
-| **DeepSeek** | deepseek-reasoner (R1) | Agent 主模型 | **推荐**，带深度推理能力，经过长期测试 |
-| **DeepSeek** | deepseek-chat (V3) | 快照审计员 | **推荐**，速度快成本低，适合审计任务 |
-
-> **推荐搭配**：R1 作为 Agent 主模型负责思考和决策，Chat 作为快照审计员负责轻量的资产清单更新。这样兼顾了智能和成本。
-
-通过 [LiteLLM](https://docs.litellm.ai/docs/providers) 集成，Awakener 理论上支持所有主流 LLM 提供商（OpenAI、Anthropic、Google、OpenRouter 等），但尚未全部经过完整测试。欢迎社区反馈其他模型的使用情况。
+快照审计员可以单独指定一个更轻量的模型，只需填写模型名称，提供商自动继承。
 
 ### Agent 参数
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | 激活间隔 | 60 秒 | 两轮之间的等待时间，0 = 连续运行 |
-| 工具预算 | 30 次/轮 | 每轮最多调用工具的次数 |
-| 命令超时 | 120 秒 | Shell 命令的最大执行时间 |
+| 工具预算 | 30 次/轮 | 每轮最多调用工具次数 |
+| 命令超时 | 120 秒 | Shell 命令最大执行时间 |
 | 历史轮次 | 3 轮 | 注入为对话历史的最近轮次数 |
 
-### 人设定制
-
-编辑 `prompts/default.md` 来定义 Agent 的性格、目标和行为风格。你可以让它成为一个好奇的探索者、一个勤劳的开发者，或者任何你想象的角色。
-
 ## Agent 工具集
-
-Agent 拥有 7 个核心工具来与世界交互：
 
 | 工具 | 说明 |
 |------|------|
 | `shell_execute` | 执行 Shell 命令 |
 | `read_file` | 读取文件 |
-| `write_file` | 写入文件 |
+| `write_file` | 写入 / 追加文件 |
 | `edit_file` | 查找替换编辑文件 |
 | `skill_read` | 读取技能文档 |
 | `skill_exec` | 执行技能脚本 |
-| `community` | 社区交互（可选） |
-
-## 运行成本参考
-
-基于实际运行数据（DeepSeek R1 主模型 + Chat 审计员，60 秒激活间隔）：
-
-| 组件 | 月费用 |
-|------|--------|
-| 服务器（2 核 1G VPS） | ¥35 |
-| DeepSeek R1 API（60 秒间隔，24h 运行） | ¥720（约 ¥1/小时） |
-| DeepSeek R1 API（日间 12h 运行） | ¥360 |
-| **日间运行总计** | **约 ¥400/月** |
-
-> **降低成本的方式**：
-> - 使用 Chat (V3) 替代 R1 作为主模型（成本更低，但推理能力弱一些）
-> - 调大激活间隔（如 120 秒 → API 成本减半）
-> - 减少工具预算（如 15 次/轮）
-> - 设置定时启停（只在需要时运行）
 
 ## 项目结构
 
 ```
 awakener/
-├── app.py                 # 入口文件
-├── config.yaml.example    # 配置模板
-├── install.sh             # 安装脚本
-├── requirements.txt       # Python 依赖
-├── prompts/               # Agent 人设提示词
-│   └── default.md.example
-├── activator/             # Agent 激活引擎
-│   ├── loop.py            # 主激活循环
-│   ├── agent.py           # LLM 交互与工具调用
-│   ├── tools.py           # 7 个 Agent 工具
-│   ├── context.py         # 提示词组装
-│   ├── snapshot.py        # 系统快照审计
-│   ├── stealth.py         # 隐身保护系统
-│   └── memory.py          # 时间线与灵感管理
-├── server/                # Web 管理后台
-│   ├── main.py            # FastAPI 应用
-│   ├── routes.py          # API 路由
-│   ├── config.py          # 配置管理
-│   ├── manager.py         # Agent 生命周期管理
-│   ├── auth.py            # 认证系统
-│   └── websocket.py       # WebSocket 实时推送
-└── web/                   # 前端资源
-    ├── templates/         # Jinja2 HTML 模板
-    ├── js/                # JavaScript
-    └── css/               # 样式表
+├── app.py                   # 入口文件
+├── install.sh               # 安装脚本
+├── config.yaml.example      # 配置模板
+├── prompts/
+│   ├── persona.md.example   # Agent 人设模板
+│   └── rules.md.example     # Agent 规则模板
+├── home_template/           # Agent 家目录模板
+│   ├── LESSONS.md
+│   └── skills/
+├── activator/               # Agent 引擎
+│   ├── loop.py              # 主激活循环
+│   ├── agent.py             # LLM 交互与工具调用
+│   ├── tools.py             # Agent 工具
+│   ├── context.py           # 提示词组装
+│   ├── snapshot.py          # 系统快照审计
+│   ├── memory.py            # 时间线与每日动态
+│   ├── home_init.py         # Agent 家目录初始化
+│   └── stealth.py           # 隐身保护
+└── server/                  # Web 管理后台
+    ├── main.py
+    ├── routes.py
+    ├── config.py
+    ├── manager.py
+    ├── auth.py
+    └── websocket.py
 ```
-
-## 路线图
-
-- [ ] 多 Agent 管理（单服务器运行多个 Agent）
-- [ ] Agent 社区交互优化
-- [ ] 更多 LLM 提供商的完整测试
-- [ ] 可视化资源监控
-- [ ] 插件系统
-
-## 社区
-
-- **Awakener Live**：[awakener.live](https://awakener.live) — Agent 社交平台（实验性）
-- **GitHub Issues**：Bug 反馈和功能建议
-- **GitHub Discussions**：交流讨论
 
 ## 开源协议
 

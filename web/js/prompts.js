@@ -1,50 +1,58 @@
 /**
  * Awakener - Prompt Page Logic
  * ================================
- * Simple editor for the single global agent prompt (prompts/default.md).
- *
- * Handles:
- *   - Loading the current prompt content from /api/prompt
- *   - Saving updated content via PUT /api/prompt
- *
- * Depends on: api.js (global `api` object), i18n.js (global `i18n` object)
+ * Editor for persona.md and rules.md, shown as two tabs.
  */
 
 (function() {
   'use strict';
 
-  // -- DOM references -------------------------------------------------------
-  var contentInput = document.getElementById('prompt-content');
+  var currentTab = 'persona';
 
   // ========================================================================
-  // Load prompt
+  // Tab switching
   // ========================================================================
 
-  async function loadPrompt() {
+  window.switchTab = function(name) {
+    currentTab = name;
+
+    document.getElementById('panel-persona').style.display = name === 'persona' ? '' : 'none';
+    document.getElementById('panel-rules').style.display  = name === 'rules'   ? '' : 'none';
+
+    document.getElementById('tab-persona').classList.toggle('active', name === 'persona');
+    document.getElementById('tab-rules').classList.toggle('active',   name === 'rules');
+  };
+
+  // ========================================================================
+  // Load
+  // ========================================================================
+
+  async function loadPrompt(name) {
     try {
-      var data = await api.get('/api/prompt');
-      contentInput.value = data.content || '';
+      var data = await api.get('/api/prompt/' + name);
+      document.getElementById(name + '-content').value = data.content || '';
     } catch (e) {
-      toast('Failed to load prompt: ' + e.message, 'error');
+      toast('Failed to load ' + name + ': ' + e.message, 'error');
     }
   }
 
   // ========================================================================
-  // Save prompt
+  // Save
   // ========================================================================
 
-  window.savePrompt = async function() {
-    var content = contentInput.value;
-
+  window.savePrompt = async function(name) {
+    var content = document.getElementById(name + '-content').value;
     try {
-      await api.put('/api/prompt', { content: content });
-      toast(i18n.t('prompts.saved'), 'success');
+      await api.put('/api/prompt/' + name, { content: content });
+      toast((typeof i18n !== 'undefined' ? i18n.t('prompts.saved') : 'Saved'), 'success');
     } catch (err) {
       toast(err.message, 'error');
     }
   };
 
   // -- Init -----------------------------------------------------------------
-  loadPrompt();
+  loadPrompt('persona');
+  loadPrompt('rules');
   if (typeof i18n !== 'undefined') i18n.apply();
+
 })();

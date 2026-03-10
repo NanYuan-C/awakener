@@ -310,6 +310,7 @@ def run_activation_loop(
     agent_config = config.get("agent", {})
     agent_home = agent_config.get("home", "/home/agent")
     model = agent_config.get("model", "deepseek/deepseek-chat")
+    api_base = agent_config.get("api_base", "") or ""
     interval = agent_config.get("interval", 60)
     max_tool_calls = agent_config.get("max_tool_calls", 20)
     shell_timeout = agent_config.get("shell_timeout", 30)
@@ -318,11 +319,11 @@ def run_activation_loop(
     persona = "default"  # Single global prompt (always default.md)
     snapshot_model = agent_config.get("snapshot_model", "") or ""
 
-    # Community settings (optional)
-    community_cfg = agent_config.get("community", {})
-    community_url = community_cfg.get("url", "") or ""
-    community_key = community_cfg.get("key", "") or ""
-    has_community = bool(community_url and community_key)
+    # If snapshot_model is set without a provider prefix, inherit from main model
+    if snapshot_model and "/" not in snapshot_model:
+        provider_prefix = model.split("/")[0] if "/" in model else ""
+        if provider_prefix:
+            snapshot_model = f"{provider_prefix}/{snapshot_model}"
 
     # API key: try environment variable based on model provider
     api_key = _resolve_api_key(model)
@@ -330,7 +331,7 @@ def run_activation_loop(
     # -- Initialize subsystems --
     data_dir = os.path.join(project_dir, "data")
     log_dir = os.path.join(data_dir, "logs")
-    skills_dir = os.path.join(data_dir, "skills")
+    skills_dir = os.path.join(agent_home, "skills")
 
     memory = MemoryManager(data_dir)
     logger = ActivatorLogger(log_dir, ws_manager, event_loop)
@@ -378,11 +379,11 @@ def run_activation_loop(
             interval = _live_cfg.get("interval", interval)
             history_rounds = _live_cfg.get("history_rounds", history_rounds)
             snapshot_model = _live_cfg.get("snapshot_model", "") or ""
-            # Hot-reload community config
-            _live_community = _live_cfg.get("community", {})
-            community_url = _live_community.get("url", "") or ""
-            community_key = _live_community.get("key", "") or ""
-            has_community = bool(community_url and community_key)
+            if snapshot_model and "/" not in snapshot_model:
+                provider_prefix = model.split("/")[0] if "/" in model else ""
+                if provider_prefix:
+                    snapshot_model = f"{provider_prefix}/{snapshot_model}"
+            api_base = _live_cfg.get("api_base", "") or ""
         except Exception:
             pass  # Keep previous values if reload fails
 
@@ -410,15 +411,16 @@ def run_activation_loop(
             except Exception:
                 pass  # Event loop may be closed
 
-        # Build context messages (includes snapshot + skills + community)
+        # Build system message (snapshot + skills)
         system_msg, has_skills = build_system_message(
             project_dir, persona, skills_dir, data_dir,
-            has_community=has_community,
+            agent_home=agent_home,
         )
 
         context_msgs = build_context_messages(
             round_num, max_tool_calls, memory,
             agent_home=agent_home,
+            data_dir=data_dir,
             history_rounds=history_rounds,
         )
 
@@ -441,8 +443,6 @@ def run_activation_loop(
             max_output=max_output,
             host_env=host_env,
             skills_dir=skills_dir,
-            community_url=community_url,
-            community_key=community_key,
         )
 
         # Define tool callback for real-time tool count updates
@@ -469,9 +469,9 @@ def run_activation_loop(
             tool_executor=tool_exec,
             model=model,
             api_key=api_key,
+            api_base=api_base,
             normal_limit=max_tool_calls,
             has_skills=has_skills,
-            has_community=has_community,
             logger=logger,
             tool_callback=on_tool_used,
         )

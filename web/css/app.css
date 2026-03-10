@@ -1141,6 +1141,39 @@ select.form-control {
   line-height: 1.6;
 }
 
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0;
+}
+
+.tab-btn {
+  padding: 6px 20px;
+  background: none;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  transition: all 0.15s;
+  position: relative;
+  bottom: -1px;
+}
+
+.tab-btn:hover {
+  color: var(--text);
+  background: var(--bg-secondary);
+}
+
+.tab-btn.active {
+  color: var(--text);
+  background: var(--bg-card);
+  border-color: var(--border);
+  border-bottom-color: var(--bg-card);
+}
+
 
 /* ==========================================================================
    10b. Skills Page
@@ -1712,22 +1745,6 @@ select.form-control {
 .tag-discovery   { background: #ede9fe; color: #5b21b6; }
 .tag-routine     { background: var(--color-bg); color: var(--color-text-light); }
 .tag-default     { background: var(--color-bg); color: var(--color-text-light); }
-
-/* -- Quote (verbatim agent excerpt) --------------------------------------- */
-
-.feed-quote {
-  margin: var(--spacing-sm) 0;
-  padding: var(--spacing-sm) var(--spacing-md);
-  border-left: 3px solid var(--color-primary);
-  background: var(--color-primary-light);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  font-style: italic;
-  font-size: var(--font-size-sm);
-  line-height: 1.65;
-  color: var(--color-text);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
 
 /* -- Detail link ---------------------------------------------------------- */
 

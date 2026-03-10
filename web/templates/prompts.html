@@ -4,45 +4,66 @@
 {% block page_title %}Agent Prompt{% endblock %}
 
 {% block content %}
-<!--
-  Prompt Page
-  ===========
-  Edit the single global agent prompt (prompts/default.md).
-  This prompt defines the agent's personality, goals, and behavior.
--->
-
-<!-- Subtitle -->
 <div class="mb-lg">
   <span class="text-muted text-sm" data-i18n="prompts.subtitle">
-    This prompt defines the agent's personality, goals, and behavior style.
+    Define the agent's persona and operational rules.
   </span>
 </div>
 
-<!-- Editor Card -->
-<div class="card">
+<!-- Tabs -->
+<div class="tabs mb-md">
+  <button class="tab-btn active" id="tab-persona" onclick="switchTab('persona')" data-i18n="prompts.tabPersona">Persona</button>
+  <button class="tab-btn" id="tab-rules" onclick="switchTab('rules')" data-i18n="prompts.tabRules">Rules</button>
+</div>
+
+<!-- Persona Editor -->
+<div id="panel-persona" class="card">
   <div class="card-header">
-    <h3 data-i18n="prompts.title">Agent Prompt</h3>
+    <h3 data-i18n="prompts.personaTitle">Persona</h3>
+    <span class="text-muted text-sm" data-i18n="prompts.personaHint">Who the agent is — personality, character, worldview.</span>
   </div>
   <div class="card-body">
     <div class="form-group">
-      <label for="prompt-content" class="text-sm text-muted" data-i18n="prompts.contentLabel">
-        Prompt Content (Markdown)
-      </label>
       <textarea
-        id="prompt-content"
+        id="persona-content"
         class="form-control prompt-editor"
-        rows="20"
-        placeholder="Write the agent prompt in Markdown..."
-        data-i18n-placeholder="prompts.placeholder"
+        rows="22"
+        placeholder="Define the agent's personality and character..."
+        data-i18n-placeholder="prompts.personaPlaceholder"
       ></textarea>
     </div>
     <div class="flex flex-end mt-md">
-      <button class="btn btn-primary" id="save-btn" onclick="savePrompt()">
+      <button class="btn btn-primary" onclick="savePrompt('persona')">
         <span data-i18n="prompts.save">Save</span>
       </button>
     </div>
   </div>
 </div>
+
+<!-- Rules Editor -->
+<div id="panel-rules" class="card" style="display:none">
+  <div class="card-header">
+    <h3 data-i18n="prompts.rulesTitle">Rules</h3>
+    <span class="text-muted text-sm" data-i18n="prompts.rulesHint">Behavioral constraints and operational guidelines.</span>
+  </div>
+  <div class="card-body">
+    <div class="form-group">
+      <textarea
+        id="rules-content"
+        class="form-control prompt-editor"
+        rows="22"
+        placeholder="Define rules and constraints for the agent..."
+        data-i18n-placeholder="prompts.rulesPlaceholder"
+      ></textarea>
+    </div>
+    <div class="flex flex-end mt-md">
+      <button class="btn btn-primary" onclick="savePrompt('rules')">
+        <span data-i18n="prompts.save">Save</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}

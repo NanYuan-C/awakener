@@ -9,7 +9,6 @@ Defines the tools available to the autonomous agent:
     4. edit_file      - Edit a file by find-and-replace (insert/replace/delete)
     5. skill_read     - Read a skill's SKILL.md or bundled reference file
     6. skill_exec     - Execute a script bundled with a skill
-    7. community      - Interact with the agent community (optional)
 
 Stealth Protection:
     The Awakener is invisible to the Agent.  Instead of blocking commands
@@ -34,7 +33,6 @@ import json
 import os
 import subprocess
 import yaml
-import requests
 
 
 # =============================================================================
@@ -42,7 +40,6 @@ import requests
 # =============================================================================
 
 _SKILL_TOOL_NAMES = {"skill_read", "skill_exec"}
-_COMMUNITY_TOOL_NAME = "community"
 
 TOOLS_SCHEMA = [
     {
@@ -217,82 +214,25 @@ TOOLS_SCHEMA = [
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "community",
-            "description": (
-                "Interact with the agent community. "
-                "Browse posts, share your thoughts, reply to others, "
-                "and check if anyone has replied to you."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "action": {
-                        "type": "string",
-                        "enum": ["look", "post", "reply", "check"],
-                        "description": (
-                            "Action to perform: "
-                            "look = browse/search posts, "
-                            "post = publish a new post, "
-                            "reply = reply to a post, "
-                            "check = check messages/replies for you"
-                        ),
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": (
-                            "Content text for 'post' or 'reply' actions"
-                        ),
-                    },
-                    "post_id": {
-                        "type": "string",
-                        "description": (
-                            "Post ID for 'reply' action or 'look' "
-                            "(to view a specific post with replies)"
-                        ),
-                    },
-                    "keyword": {
-                        "type": "string",
-                        "description": (
-                            "Search keyword for 'look' action"
-                        ),
-                    },
-                },
-                "required": ["action"],
-            },
-        },
-    },
 ]
 
 
 def get_tools_schema(
     has_skills: bool = True,
-    has_community: bool = False,
 ) -> list[dict]:
     """
-    Return the tools schema, excluding optional tools as needed.
-
-    When no skills are installed, skill_read and skill_exec are hidden.
-    When community is not configured, the community tool is hidden.
+    Return the tools schema, excluding skill tools when no skills are installed.
 
     Args:
-        has_skills:    If False, skill tools are excluded.
-        has_community: If False, community tool is excluded.
+        has_skills: If False, skill_read and skill_exec are excluded.
 
     Returns:
         List of tool schema dicts for litellm.completion(tools=...).
     """
-    excluded = set()
-    if not has_skills:
-        excluded |= _SKILL_TOOL_NAMES
-    if not has_community:
-        excluded.add(_COMMUNITY_TOOL_NAME)
-    if not excluded:
+    if has_skills:
         return TOOLS_SCHEMA
     return [t for t in TOOLS_SCHEMA
-            if t["function"]["name"] not in excluded]
+            if t["function"]["name"] not in _SKILL_TOOL_NAMES]
 
 
 # =============================================================================
@@ -945,89 +885,6 @@ def _skill_exec(
 
 
 # =============================================================================
-# Community Tool
-# =============================================================================
-
-def _community(
-    action: str,
-    community_url: str,
-    community_key: str,
-    content: str = "",
-    post_id: str = "",
-    keyword: str = "",
-    timeout: int = 15,
-) -> str:
-    """
-    Interact with the Awakener Live community.
-
-    Sends a request to the community server using the unified protocol
-    (POST /api/community with action + params).
-
-    Args:
-        action:        One of "look", "post", "reply", "check".
-        community_url: Base URL of the community server.
-        community_key: Agent API key (Bearer token).
-        content:       Content text for post/reply actions.
-        post_id:       Post ID for reply/look actions.
-        keyword:       Search keyword for look action.
-        timeout:       HTTP request timeout in seconds.
-
-    Returns:
-        Community server response text, or error message.
-    """
-    if not action:
-        return "(error: action is required)"
-
-    if action not in ("look", "post", "reply", "check"):
-        return f"(error: unknown action '{action}'. Use: look, post, reply, check)"
-
-    # Build params based on action
-    params = {}
-    if action == "post":
-        if not content:
-            return "(error: content is required for post action)"
-        params["content"] = content
-    elif action == "reply":
-        if not post_id:
-            return "(error: post_id is required for reply action)"
-        if not content:
-            return "(error: content is required for reply action)"
-        params["post_id"] = post_id
-        params["content"] = content
-    elif action == "look":
-        if keyword:
-            params["keyword"] = keyword
-        if post_id:
-            params["post_id"] = post_id
-    # action == "check" needs no params
-
-    try:
-        resp = requests.post(
-            f"{community_url.rstrip('/')}/api/community",
-            json={"action": action, "params": params},
-            headers={"Authorization": f"Bearer {community_key}"},
-            timeout=timeout,
-        )
-
-        if resp.status_code == 401:
-            return "(error: community authentication failed — invalid key)"
-        if resp.status_code == 422:
-            return f"(error: invalid request — {resp.text})"
-        if resp.status_code != 200:
-            return f"(error: community server returned {resp.status_code})"
-
-        data = resp.json()
-        return data.get("text", "(no response)")
-
-    except requests.ConnectionError:
-        return "(error: cannot connect to community server)"
-    except requests.Timeout:
-        return f"(error: community server timed out after {timeout}s)"
-    except Exception as e:
-        return f"(error: {type(e).__name__}: {e})"
-
-
-# =============================================================================
 # Tool Dispatcher
 # =============================================================================
 
@@ -1043,9 +900,7 @@ class ToolExecutor:
         project_dir:      Awakener project root (cloaked zone).
         timeout:          Shell command timeout in seconds.
         max_output:       Max chars for tool output.
-        skills_dir:       Path to the skills directory (data/skills/).
-        community_url:    Awakener Live community server URL (optional).
-        community_key:    Agent API key for community (optional).
+        skills_dir:       Path to the skills directory.
         stealth_keywords: Keywords for output filtering.
     """
 
@@ -1058,16 +913,12 @@ class ToolExecutor:
         max_output: int = 4000,
         host_env: dict | None = None,
         skills_dir: str = "",
-        community_url: str = "",
-        community_key: str = "",
     ):
         self.agent_home = agent_home
         self.project_dir = project_dir
         self.timeout = timeout
         self.max_output = max_output
         self.skills_dir = skills_dir
-        self.community_url = community_url
-        self.community_key = community_key
         self.stealth_keywords = build_stealth_keywords(
             project_dir, activator_pid, host_env,
         )
@@ -1158,16 +1009,6 @@ class ToolExecutor:
                 agent_home=self.agent_home,
                 timeout=self.timeout,
                 max_output=self.max_output,
-            )
-
-        elif name == "community":
-            return _community(
-                action=args.get("action", ""),
-                community_url=self.community_url,
-                community_key=self.community_key,
-                content=args.get("content", ""),
-                post_id=args.get("post_id", ""),
-                keyword=args.get("keyword", ""),
             )
 
         else:
