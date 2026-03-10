@@ -412,7 +412,6 @@ def run_round(
     api_key: str | None = None,
     api_base: str = "",
     normal_limit: int = 20,
-    has_skills: bool = True,
     logger=None,
     tool_callback: Callable[[int], None] | None = None,
 ) -> RoundResult:
@@ -437,8 +436,6 @@ def run_round(
         api_key:        Optional API key override.
         api_base:       Optional custom API base URL (e.g. for local models).
         normal_limit:   Normal tool budget per round.
-        has_skills:     Whether skills are installed.  When False,
-                        skill tools are excluded from the schema.
         logger:         Logger callback object (must have info, loading,
                         tool_call, tool_result, thought_chunk,
                         thought_done methods).
@@ -466,7 +463,7 @@ def run_round(
             kwargs = dict(
                 model=model,
                 messages=messages,
-                tools=get_tools_schema(has_skills),
+                tools=get_tools_schema(),
                 tool_choice="auto",
                 api_key=api_key,
                 stream=True,

@@ -105,8 +105,6 @@ cd /opt/awakener && source venv/bin/activate && python app.py
 | `read_file` | 读取文件 |
 | `write_file` | 写入 / 追加文件 |
 | `edit_file` | 查找替换编辑文件 |
-| `skill_read` | 读取技能文档 |
-| `skill_exec` | 执行技能脚本 |
 
 ## 项目结构
 

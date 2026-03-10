@@ -39,8 +39,6 @@ import yaml
 # Tool Schemas (OpenAI function-calling format)
 # =============================================================================
 
-_SKILL_TOOL_NAMES = {"skill_read", "skill_exec"}
-
 TOOLS_SCHEMA = [
     {
         "type": "function",
@@ -148,91 +146,17 @@ TOOLS_SCHEMA = [
             },
         },
     },
-    {
-        "type": "function",
-        "function": {
-            "name": "skill_read",
-            "description": (
-                "Read a skill's instruction file (SKILL.md) or a bundled "
-                "reference document. Your installed skills are listed in the "
-                "system prompt. Use this tool to get the full instructions "
-                "when you need to apply a skill."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": (
-                            "The skill directory name, e.g. 'python-best-practices'"
-                        ),
-                    },
-                    "file": {
-                        "type": "string",
-                        "description": (
-                            "Optional relative path within the skill directory. "
-                            "Defaults to 'SKILL.md'. Use this to read reference "
-                            "files, e.g. 'references/guide.md'."
-                        ),
-                    },
-                },
-                "required": ["name"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "skill_exec",
-            "description": (
-                "Execute a script bundled with a skill. "
-                "The script must exist inside the skill's 'scripts/' directory. "
-                "Returns the combined stdout and stderr output."
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": "The skill directory name",
-                    },
-                    "script": {
-                        "type": "string",
-                        "description": (
-                            "Script filename inside the skill's scripts/ directory, "
-                            "e.g. 'analyze.sh' or 'setup.py'"
-                        ),
-                    },
-                    "args": {
-                        "type": "string",
-                        "description": (
-                            "Optional command-line arguments passed to the script"
-                        ),
-                    },
-                },
-                "required": ["name", "script"],
-            },
-        },
-    },
 ]
 
 
-def get_tools_schema(
-    has_skills: bool = True,
-) -> list[dict]:
+def get_tools_schema() -> list[dict]:
     """
-    Return the tools schema, excluding skill tools when no skills are installed.
-
-    Args:
-        has_skills: If False, skill_read and skill_exec are excluded.
+    Return the tools schema.
 
     Returns:
         List of tool schema dicts for litellm.completion(tools=...).
     """
-    if has_skills:
-        return TOOLS_SCHEMA
-    return [t for t in TOOLS_SCHEMA
-            if t["function"]["name"] not in _SKILL_TOOL_NAMES]
+    return TOOLS_SCHEMA
 
 
 # =============================================================================
@@ -736,154 +660,6 @@ def _parse_skill_frontmatter(filepath: str) -> dict:
         return {}
 
 
-def _skill_read(
-    name: str,
-    file: str,
-    skills_dir: str,
-    max_output: int = 4000,
-) -> str:
-    """
-    Read a file from an installed skill.
-
-    Args:
-        name:       Skill directory name.
-        file:       Relative path within the skill directory (default SKILL.md).
-        skills_dir: Path to ``data/skills/`` directory.
-        max_output: Max characters to return.
-
-    Returns:
-        File content or error message.
-    """
-    if not name:
-        return "(error: skill name is required)"
-
-    skill_path = os.path.join(skills_dir, name)
-    if not os.path.isdir(skill_path):
-        return f"(error: skill '{name}' not found)"
-
-    # Default to SKILL.md
-    if not file:
-        file = "SKILL.md"
-
-    # Prevent path traversal
-    target = os.path.realpath(os.path.join(skill_path, file))
-    skill_real = os.path.realpath(skill_path)
-    if not target.startswith(skill_real + os.sep) and target != skill_real:
-        return "(error: path traversal is not allowed)"
-
-    if not os.path.isfile(target):
-        return f"(error: file '{file}' not found in skill '{name}')"
-
-    try:
-        with open(target, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
-        if not content:
-            return "(file is empty)"
-        if len(content) > max_output:
-            content = (
-                content[:max_output]
-                + f"\n... (truncated, total {len(content)} chars)"
-            )
-        return content
-    except Exception as e:
-        return f"(error: {type(e).__name__}: {e})"
-
-
-def _skill_exec(
-    name: str,
-    script: str,
-    args: str,
-    skills_dir: str,
-    agent_home: str,
-    timeout: int = 30,
-    max_output: int = 4000,
-) -> str:
-    """
-    Execute a script bundled with a skill.
-
-    The script must reside in the skill's ``scripts/`` directory.
-    It is executed with the agent's home directory as cwd and a
-    sanitised environment (no API keys or host session variables).
-
-    Args:
-        name:       Skill directory name.
-        script:     Script filename inside ``scripts/``.
-        args:       Optional command-line arguments string.
-        skills_dir: Path to ``data/skills/`` directory.
-        agent_home: Agent's working directory (cwd for subprocess).
-        timeout:    Max execution time in seconds.
-        max_output: Max characters to return.
-
-    Returns:
-        Script output or error message.
-    """
-    if not name or not script:
-        return "(error: skill name and script are required)"
-
-    skill_path = os.path.join(skills_dir, name)
-    if not os.path.isdir(skill_path):
-        return f"(error: skill '{name}' not found)"
-
-    scripts_dir = os.path.join(skill_path, "scripts")
-    if not os.path.isdir(scripts_dir):
-        return f"(error: skill '{name}' has no scripts/ directory)"
-
-    # Prevent path traversal
-    target = os.path.realpath(os.path.join(scripts_dir, script))
-    scripts_real = os.path.realpath(scripts_dir)
-    if not target.startswith(scripts_real + os.sep) and target != scripts_real:
-        return "(error: path traversal is not allowed)"
-
-    if not os.path.isfile(target):
-        return f"(error: script '{script}' not found in skill '{name}')"
-
-    # Build the command
-    command = target
-    if args:
-        command += " " + args
-
-    try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=agent_home,
-            env=make_clean_env(),
-        )
-        output = ""
-        if result.stdout:
-            output += result.stdout
-        if result.stderr:
-            output += result.stderr
-        if not output.strip():
-            output = f"(no output, exit code: {result.returncode})"
-        if len(output) > max_output:
-            output = (
-                output[:max_output]
-                + f"\n... (truncated, total {len(output)} chars)"
-            )
-
-        # Sanitise: replace absolute skill path with relative name
-        # so shell errors like "bash: /opt/.../analyze.sh: Permission denied"
-        # become "bash: skills/name/scripts/analyze.sh: Permission denied"
-        relative_prefix = f"skills/{name}/scripts/"
-        if scripts_dir in output:
-            output = output.replace(scripts_dir + "/", relative_prefix)
-            output = output.replace(scripts_dir, relative_prefix.rstrip("/"))
-        if scripts_real in output and scripts_real != scripts_dir:
-            output = output.replace(scripts_real + "/", relative_prefix)
-            output = output.replace(scripts_real, relative_prefix.rstrip("/"))
-
-        return output
-
-    except subprocess.TimeoutExpired:
-        return f"(error: script timed out after {timeout}s)"
-    except Exception as e:
-        return f"(error: {type(e).__name__}: {e})"
-
-
 # =============================================================================
 # Tool Dispatcher
 # =============================================================================
@@ -900,7 +676,6 @@ class ToolExecutor:
         project_dir:      Awakener project root (cloaked zone).
         timeout:          Shell command timeout in seconds.
         max_output:       Max chars for tool output.
-        skills_dir:       Path to the skills directory.
         stealth_keywords: Keywords for output filtering.
     """
 
@@ -912,13 +687,11 @@ class ToolExecutor:
         timeout: int = 30,
         max_output: int = 4000,
         host_env: dict | None = None,
-        skills_dir: str = "",
     ):
         self.agent_home = agent_home
         self.project_dir = project_dir
         self.timeout = timeout
         self.max_output = max_output
-        self.skills_dir = skills_dir
         self.stealth_keywords = build_stealth_keywords(
             project_dir, activator_pid, host_env,
         )
@@ -990,25 +763,6 @@ class ToolExecutor:
                 old_str=args.get("old_str", ""),
                 new_str=args.get("new_str", ""),
                 project_dir=self.project_dir,
-            )
-
-        elif name == "skill_read":
-            return _skill_read(
-                name=args.get("name", ""),
-                file=args.get("file", ""),
-                skills_dir=self.skills_dir,
-                max_output=self.max_output,
-            )
-
-        elif name == "skill_exec":
-            return _skill_exec(
-                name=args.get("name", ""),
-                script=args.get("script", ""),
-                args=args.get("args", ""),
-                skills_dir=self.skills_dir,
-                agent_home=self.agent_home,
-                timeout=self.timeout,
-                max_output=self.max_output,
             )
 
         else:

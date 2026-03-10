@@ -105,8 +105,6 @@ The snapshot auditor can use a separate (lighter) model — just enter the model
 | `read_file` | Read files |
 | `write_file` | Write / append files |
 | `edit_file` | Find-and-replace file editing |
-| `skill_read` | Read skill documentation |
-| `skill_exec` | Execute skill scripts |
 
 ## Project Structure
 

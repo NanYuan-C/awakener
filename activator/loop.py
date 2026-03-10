@@ -412,7 +412,7 @@ def run_activation_loop(
                 pass  # Event loop may be closed
 
         # Build system message (snapshot + skills)
-        system_msg, has_skills = build_system_message(
+        system_msg = build_system_message(
             project_dir, persona, skills_dir, data_dir,
             agent_home=agent_home,
         )
@@ -442,7 +442,6 @@ def run_activation_loop(
             timeout=shell_timeout,
             max_output=max_output,
             host_env=host_env,
-            skills_dir=skills_dir,
         )
 
         # Define tool callback for real-time tool count updates
@@ -471,7 +470,6 @@ def run_activation_loop(
             api_key=api_key,
             api_base=api_base,
             normal_limit=max_tool_calls,
-            has_skills=has_skills,
             logger=logger,
             tool_callback=on_tool_used,
         )

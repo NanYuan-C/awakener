@@ -60,18 +60,6 @@ old_str must match exactly one location. Include enough surrounding context
 (a few lines) to ensure uniqueness.
 """.strip()
 
-TOOL_DOCS_SKILLS = """
-### 5. skill_read(name, file?)
-Read a skill's instruction file or bundled reference document. Your installed
-skills are listed below. Call `skill_read("skill-name")` to get the full
-SKILL.md instructions. Use the optional `file` parameter to read reference
-files, e.g. `skill_read("db-optimizer", "references/mysql-tuning.md")`.
-
-### 6. skill_exec(name, script, args?)
-Execute a script bundled with a skill. The script must be inside the skill's
-`scripts/` directory. Pass optional arguments as a string.
-""".strip()
-
 TOOL_DOCS_RULES = """
 ## Important Rules
 
@@ -132,7 +120,7 @@ def build_system_message(
     skills_dir: str = "",
     data_dir: str = "",
     agent_home: str = "",
-) -> tuple[str, bool]:
+) -> str:
     """
     Build the full system message.
 
@@ -151,30 +139,12 @@ def build_system_message(
         agent_home:      Agent's home directory path.
 
     Returns:
-        Tuple of (system_message_string, has_skills_bool).
+        The system message string.
     """
     persona = load_persona(project_dir, persona_name)
     rules = load_rules(project_dir)
 
-    # Check for installed skills
-    has_skills = False
-    enabled_skills = []
-    if skills_dir:
-        skills = scan_skills(skills_dir)
-        enabled_skills = [s for s in skills if s.get("enabled")]
-        has_skills = len(enabled_skills) > 0
-
-    # Build tool docs — include optional tools only when available
-    # Base: 4 tools, +2 for skills
-    tool_count = 4
-    if has_skills:
-        tool_count += 2
-
-    tool_docs = TOOL_DOCS_BASE.format(tool_count=tool_count)
-
-    if has_skills:
-        tool_docs += "\n\n" + TOOL_DOCS_SKILLS
-
+    tool_docs = TOOL_DOCS_BASE.format(tool_count=4)
     tool_docs += "\n\n" + TOOL_DOCS_RULES
 
     parts = [persona]
@@ -185,22 +155,25 @@ def build_system_message(
     parts.append(tool_docs)
 
     # Append skills index (only if skills exist)
-    if enabled_skills:
-        parts.append("")
-        parts.append("## Installed Skills")
-        parts.append("")
-        parts.append(
-            "You have expert skills installed. **Before starting any "
-            "building or coding work, read the relevant skills first** "
-            "using `skill_read(name)`. They contain critical guidelines "
-            "and best practices you must follow."
-        )
-        parts.append("")
-        parts.append("| Skill | Description |")
-        parts.append("|-------|-------------|")
-        for s in enabled_skills:
-            desc = s.get("description", "") or s.get("title", s["name"])
-            parts.append(f"| {s['name']} | {desc} |")
+    if skills_dir:
+        skills = scan_skills(skills_dir)
+        enabled_skills = [s for s in skills if s.get("enabled")]
+        if enabled_skills:
+            parts.append("")
+            parts.append("## Installed Skills")
+            parts.append("")
+            parts.append(
+                f"Your skills are in `{skills_dir}`. "
+                "**Before starting any building or coding work, read the "
+                "relevant skill first** using `read_file`. Each skill has a "
+                "`SKILL.md` with guidelines you must follow."
+            )
+            parts.append("")
+            parts.append("| Skill | Description |")
+            parts.append("|-------|-------------|")
+            for s in enabled_skills:
+                desc = s.get("description", "") or s.get("title", s["name"])
+                parts.append(f"| {s['name']} | {desc} |")
 
     # Append lessons (experience & lessons learned from agent_home/LESSONS.md)
     if agent_home:
@@ -219,7 +192,7 @@ def build_system_message(
             parts.append("")
             parts.append(snapshot_md)
 
-    return "\n".join(parts), has_skills
+    return "\n".join(parts)
 
 
 def get_today_feed(data_dir: str) -> list[dict]:
