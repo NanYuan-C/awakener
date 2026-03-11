@@ -130,6 +130,7 @@ def build_system_message(
         5. Lessons learned
         6. System snapshot
         7. Long-term memory index
+        8. Today's activity (dynamic, injected last)
     """
     persona = load_persona(project_dir, persona_name)
     rules = load_rules(project_dir)
@@ -192,6 +193,15 @@ def build_system_message(
                 "Keep INDEX.md as a concise index; store details in separate files there."
             )
 
+    if data_dir:
+        today_feed = get_today_feed(data_dir)
+        if today_feed:
+            parts.append("")
+            parts.append("## Today's Activity")
+            parts.append("")
+            for item in today_feed:
+                parts.append(f"- [{item['time']}] {item['content']}")
+
     return "\n".join(parts)
 
 
@@ -235,17 +245,6 @@ def build_context_messages(
     """Build the multi-turn context messages for a new round."""
     messages = []
 
-    if data_dir:
-        today_feed = get_today_feed(data_dir)
-        if today_feed:
-            feed_lines = ["Today's activity:"]
-            for item in today_feed:
-                feed_lines.append(f"- [{item['time']}] {item['content']}")
-            messages.append({
-                "role": "system",
-                "content": "\n".join(feed_lines),
-            })
-
     recent_timeline = memory.get_recent_timeline(count=history_rounds)
     if recent_timeline:
         for entry in recent_timeline:
@@ -268,11 +267,12 @@ def build_context_messages(
     inspiration = memory.read_inspiration()
     if inspiration:
         messages.append({
-            "role": "system",
-            "content": (
-                "A sudden spark of inspiration crosses your mind: "
-                f'"{inspiration}"'
-            ),
+            "role": "user",
+            "content": f"[Inspiration] {inspiration}",
+        })
+        messages.append({
+            "role": "assistant",
+            "content": "Noted.",
         })
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
