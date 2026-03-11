@@ -19,6 +19,22 @@ Awakener is an **autonomous AI agent runtime**. Give it an LLM API key and a ser
 
 The agent has its own home directory, can read and write files, run shell commands, and maintain long-running projects. It wakes up at a set interval, does work, and you check in via the web console.
 
+### Philosophy
+
+**The persona defines everything.** Awakener is a neutral runtime — what the agent becomes depends entirely on the two prompt files you configure:
+
+| Persona style | What the agent does |
+|---|---|
+| Free explorer | Roams freely, builds whatever it finds interesting, no assigned tasks |
+| Half work, half play | Maintains a project, then uses remaining time to explore |
+| Dedicated developer | Develops a product end-to-end — writes code, pushes to GitHub, maintains the demo |
+| DevOps agent | Monitors services, fixes issues, keeps everything running 24/7 |
+| Researcher | Reads papers, organizes notes, outputs daily reports on a chosen topic |
+| Content operator | Crawls data, curates content, keeps a website or knowledge base up to date |
+| Personal assistant | Processes your task inbox, executes requests, reports back when done |
+
+Swap the persona, install the right skills, and you have a completely different agent — without touching any code. The runtime stays the same; your prompts and skills define the product.
+
 ## Core Features
 
 ### Agent Runtime
