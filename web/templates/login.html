@@ -66,6 +66,10 @@
       // Check if setup is needed
       try {
         const status = await fetch('/api/auth/status').then(r => r.json());
+        if (!status.language_configured) {
+          const lang = navigator.language || navigator.userLanguage || 'en';
+          try { await fetch('/api/init/language', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ language: lang }) }); } catch(_) {}
+        }
         if (!status.is_configured) {
           window.location.href = '/setup';
           return;

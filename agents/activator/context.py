@@ -20,9 +20,10 @@ The context consists of two parts:
 import os
 import json
 from datetime import datetime, timezone
-from activator.memory import MemoryManager
-from activator.tools import scan_skills
-from activator.snapshot import load_snapshot, render_snapshot_markdown, _extract_final_output
+
+from services.memory import MemoryManager
+from services.skills import scan_skills
+from agents.auditor.snapshot import load_snapshot, render_snapshot_markdown, _extract_final_output
 
 
 # =============================================================================
@@ -73,11 +74,7 @@ TOOL_DOCS_RULES = """
 # =============================================================================
 
 def load_persona(project_dir: str, persona_name: str = "persona") -> str:
-    """
-    Load the persona prompt (prompts/persona.md).
-    Falls back to a built-in default if the file doesn't exist.
-    """
-    filepath = os.path.join(project_dir, "prompts", f"{persona_name}.md")
+    filepath = os.path.join(project_dir, "agents", "activator", f"{persona_name}.md")
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             return f.read().strip()
@@ -89,11 +86,7 @@ def load_persona(project_dir: str, persona_name: str = "persona") -> str:
 
 
 def load_rules(project_dir: str) -> str:
-    """
-    Load the rules prompt (prompts/rules.md).
-    Returns empty string if the file doesn't exist.
-    """
-    filepath = os.path.join(project_dir, "prompts", "rules.md")
+    filepath = os.path.join(project_dir, "agents", "activator", "rules.md")
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             return f.read().strip()
@@ -102,11 +95,16 @@ def load_rules(project_dir: str) -> str:
 
 
 def load_lessons(agent_home: str) -> str:
-    """
-    Load LESSONS.md from the agent's home directory.
-    Returns empty string if the file doesn't exist.
-    """
     filepath = os.path.join(agent_home, "LESSONS.md")
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except (FileNotFoundError, OSError):
+        return ""
+
+
+def load_memory_index(agent_home: str) -> str:
+    filepath = os.path.join(agent_home, "memory", "INDEX.md")
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             return f.read().strip()
@@ -125,21 +123,12 @@ def build_system_message(
     Build the full system message.
 
     Assembled in order:
-        1. Persona prompt (who you are)
-        2. Tool documentation (what you can do)
-        3. Installed skills index (expert knowledge, only if skills exist)
-        4. Lessons learned (from agent_home/LESSONS.md)
-        5. System snapshot (asset inventory)
-
-    Args:
-        project_dir:     Awakener project root.
-        persona_name:    Active persona name.
-        skills_dir:      Path to skills directory.
-        data_dir:        Path to ``data/`` directory (for snapshot).
-        agent_home:      Agent's home directory path.
-
-    Returns:
-        The system message string.
+        1. Persona prompt
+        2. Tool documentation
+        3. Installed skills index
+        4. Lessons learned
+        5. Long-term memory index
+        6. System snapshot
     """
     persona = load_persona(project_dir, persona_name)
     rules = load_rules(project_dir)
@@ -154,7 +143,6 @@ def build_system_message(
     parts.append("")
     parts.append(tool_docs)
 
-    # Append skills index (only if skills exist)
     if skills_dir:
         skills = scan_skills(skills_dir)
         enabled_skills = [s for s in skills if s.get("enabled")]
@@ -175,7 +163,6 @@ def build_system_message(
                 desc = s.get("description", "") or s.get("title", s["name"])
                 parts.append(f"| {s['name']} | {desc} |")
 
-    # Append lessons (experience & lessons learned from agent_home/LESSONS.md)
     if agent_home:
         lessons = load_lessons(agent_home)
         if lessons:
@@ -184,7 +171,19 @@ def build_system_message(
             parts.append("")
             parts.append(lessons)
 
-    # Append system snapshot (asset inventory)
+    if agent_home:
+        memory_index = load_memory_index(agent_home)
+        if memory_index:
+            parts.append("")
+            parts.append("## Long-term Memory")
+            parts.append("")
+            parts.append(memory_index)
+            parts.append("")
+            parts.append(
+                f"> Your full memory directory is at `{os.path.join(agent_home, 'memory')}`. "
+                "Keep INDEX.md as a concise index; store details in separate files there."
+            )
+
     if data_dir:
         snapshot = load_snapshot(data_dir)
         snapshot_md = render_snapshot_markdown(snapshot)
@@ -196,10 +195,6 @@ def build_system_message(
 
 
 def get_today_feed(data_dir: str) -> list[dict]:
-    """
-    Read today's (UTC) activity entries from data/feed.jsonl.
-    Returns a list of dicts with keys: round, time (HH:MM), content.
-    """
     feed_path = os.path.join(data_dir, "feed.jsonl")
     if not os.path.exists(feed_path):
         return []
@@ -220,7 +215,7 @@ def get_today_feed(data_dir: str) -> list[dict]:
                 if ts.startswith(today):
                     entries.append({
                         "round": obj.get("round", "?"),
-                        "time": ts[11:16],  # HH:MM
+                        "time": ts[11:16],
                         "content": obj.get("content", ""),
                     })
     except OSError:
@@ -236,41 +231,11 @@ def build_context_messages(
     data_dir: str = "",
     history_rounds: int = 3,
 ) -> list[dict]:
-    """
-    Build the multi-turn context messages for a new round.
-
-    Returns a list of messages in standard chat format that simulates
-    a multi-turn conversation between the activator (user) and the agent
-    (assistant). Historical rounds are injected as user/assistant pairs
-    so the LLM perceives them as its own prior conversations.
-
-    Structure:
-        1. Historical rounds (oldest first):
-           - {"role": "user",      "content": "Round N | time | stats"}
-           - {"role": "assistant", "content": "<final output from round N>"}
-        2. Inspiration (if any):
-           - {"role": "system",    "content": "A spark of inspiration: ..."}
-        3. Current round wake-up:
-           - {"role": "user",      "content": "time, round, budget, wake up"}
-
-    Args:
-        round_num:      Current activation round number.
-        max_tool_calls: Tool budget for this round.
-        memory:         MemoryManager instance.
-        agent_home:     Agent's home directory path.
-        data_dir:       Path to data/ directory (for today's feed).
-        history_rounds: Number of recent rounds to inject as history.
-
-    Returns:
-        List of message dicts (role + content). Does NOT include the
-        system message — the caller prepends that.
-    """
+    """Build the multi-turn context messages for a new round."""
     messages = []
 
-    # -- Historical rounds as user/assistant pairs (oldest first) --
     recent_timeline = memory.get_recent_timeline(count=history_rounds)
     if recent_timeline:
-        # get_recent_timeline returns oldest first (chronological order)
         for entry in recent_timeline:
             r = entry.get("round", "?")
             ts = entry.get("timestamp", "")
@@ -282,18 +247,15 @@ def build_context_messages(
             if not final_output:
                 final_output = "(no output)"
 
-            # User message: activator's wake-up signal for that round
             messages.append({
                 "role": "user",
                 "content": f"Round {r} | {ts} | Tools: {tools} | {dur}s",
             })
-            # Assistant message: agent's final output from that round
             messages.append({
                 "role": "assistant",
                 "content": final_output,
             })
 
-    # -- Inspiration (system-level injection, if present) --
     inspiration = memory.read_inspiration()
     if inspiration:
         messages.append({
@@ -304,15 +266,12 @@ def build_context_messages(
             ),
         })
 
-    # -- Current round wake-up --
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-
     wakeup_parts = [
         f"Current time: {now}",
         f"Round {round_num} (tool budget: {max_tool_calls})",
     ]
 
-    # Inject today's completed rounds as a brief activity summary
     if data_dir:
         today_feed = get_today_feed(data_dir)
         if today_feed:

@@ -281,7 +281,7 @@ class ConfigManager:
 
     def get_prompts_dir(self) -> str:
         """Return the absolute path to the prompts directory."""
-        return os.path.join(self.project_dir, "prompts")
+        return os.path.join(self.project_dir, "agents", "activator")
 
     def list_personas(self) -> list[dict]:
         """

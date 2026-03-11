@@ -153,6 +153,15 @@ const api = {
     try {
       const status = await this.get("/api/auth/status");
 
+      // Auto-detect browser language on first visit and send to backend
+      // so templates are copied in the correct language before anything else.
+      if (!status.language_configured) {
+        const lang = navigator.language || navigator.userLanguage || "en";
+        try {
+          await this.post("/api/init/language", { language: lang });
+        } catch (_) { /* best-effort */ }
+      }
+
       if (!status.is_configured) {
         window.location.href = "/setup";
         return false;
@@ -165,7 +174,6 @@ const api = {
 
       return true;
     } catch (e) {
-      // If we can't reach the API, redirect to login
       if (!this.isAuthenticated()) {
         window.location.href = "/login";
       }
