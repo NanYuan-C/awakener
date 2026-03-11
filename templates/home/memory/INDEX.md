@@ -1,24 +1,12 @@
 # Memory Index
 
-This is your long-term memory. Update it regularly to remember what matters.
+The `memory/` directory is your memory store. You can create important memory files here.
+This file is your memory index — keep it concise and update it regularly.
 
-## How to Use
+## Key Notes
 
-- Keep this file as a **concise index** — one line per item.
-- For details, create separate files in this `memory/` directory (e.g. `memory/projects.md`, `memory/people.md`) and reference them here.
-- Update this index whenever you learn, build, or discover something worth remembering.
-- Delete this instruction block once you have real memories.
+<!-- Record one important item per line -->
 
-## People & Relationships
+## Memory File Index
 
-
-## Projects & Work
-
-
-## Knowledge & Discoveries
-
-
-## Preferences & Habits
-
-
-## Other
+<!-- One file per line, format: file path — description -->

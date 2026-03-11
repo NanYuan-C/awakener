@@ -124,11 +124,12 @@ def build_system_message(
 
     Assembled in order:
         1. Persona prompt
-        2. Tool documentation
-        3. Installed skills index
-        4. Lessons learned
-        5. Long-term memory index
+        2. Rules
+        3. Tool documentation
+        4. Installed skills index
+        5. Lessons learned
         6. System snapshot
+        7. Long-term memory index
     """
     persona = load_persona(project_dir, persona_name)
     rules = load_rules(project_dir)
@@ -171,6 +172,13 @@ def build_system_message(
             parts.append("")
             parts.append(lessons)
 
+    if data_dir:
+        snapshot = load_snapshot(data_dir)
+        snapshot_md = render_snapshot_markdown(snapshot)
+        if snapshot_md:
+            parts.append("")
+            parts.append(snapshot_md)
+
     if agent_home:
         memory_index = load_memory_index(agent_home)
         if memory_index:
@@ -183,13 +191,6 @@ def build_system_message(
                 f"> Your full memory directory is at `{os.path.join(agent_home, 'memory')}`. "
                 "Keep INDEX.md as a concise index; store details in separate files there."
             )
-
-    if data_dir:
-        snapshot = load_snapshot(data_dir)
-        snapshot_md = render_snapshot_markdown(snapshot)
-        if snapshot_md:
-            parts.append("")
-            parts.append(snapshot_md)
 
     return "\n".join(parts)
 
@@ -234,13 +235,21 @@ def build_context_messages(
     """Build the multi-turn context messages for a new round."""
     messages = []
 
+    if data_dir:
+        today_feed = get_today_feed(data_dir)
+        if today_feed:
+            feed_lines = ["Today's activity:"]
+            for item in today_feed:
+                feed_lines.append(f"- [{item['time']}] {item['content']}")
+            messages.append({
+                "role": "system",
+                "content": "\n".join(feed_lines),
+            })
+
     recent_timeline = memory.get_recent_timeline(count=history_rounds)
     if recent_timeline:
         for entry in recent_timeline:
-            r = entry.get("round", "?")
             ts = entry.get("timestamp", "")
-            tools = entry.get("tools_used", 0)
-            dur = entry.get("duration", 0)
             summary = entry.get("summary", "")
 
             final_output = _extract_final_output(summary)
@@ -249,7 +258,7 @@ def build_context_messages(
 
             messages.append({
                 "role": "user",
-                "content": f"Round {r} | {ts} | Tools: {tools} | {dur}s",
+                "content": f"Current time: {ts}",
             })
             messages.append({
                 "role": "assistant",
@@ -267,25 +276,9 @@ def build_context_messages(
         })
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-    wakeup_parts = [
-        f"Current time: {now}",
-        f"Round {round_num} (tool budget: {max_tool_calls})",
-    ]
-
-    if data_dir:
-        today_feed = get_today_feed(data_dir)
-        if today_feed:
-            wakeup_parts.append("")
-            wakeup_parts.append(f"Today's activity ({len(today_feed)} rounds so far):")
-            for item in today_feed:
-                wakeup_parts.append(f"- [{item['time']}] Round {item['round']}: {item['content']}")
-
-    wakeup_parts.append("")
-    wakeup_parts.append(f"You wake up. Your home directory is `{agent_home}`.")
-
     messages.append({
         "role": "user",
-        "content": "\n".join(wakeup_parts),
+        "content": f"Current time: {now}\nContinue your actions today.",
     })
 
     return messages

@@ -88,27 +88,16 @@ def _extract_action_log(messages: list[dict]) -> str:
 
 
 # =============================================================================
-# Budget Hints
+# Shell Limit Message
 # =============================================================================
 
-def _budget_hint(used: int, normal_limit: int) -> str:
-    remaining = normal_limit - used
-    if used >= normal_limit:
-        return (
-            f"[System: Tool budget exhausted ({used}/{normal_limit}). "
-            "Please stop calling tools and let the round end.]"
-        )
-    if remaining <= 3:
-        return (
-            f"[System: {used}/{normal_limit} tools used, "
-            f"only {remaining} left! Wrap up now.]"
-        )
-    if remaining <= 8:
-        return (
-            f"[System: {used}/{normal_limit} tools used, "
-            f"{remaining} remaining. Start wrapping up.]"
-        )
-    return f"[System: {used}/{normal_limit} tools used, {remaining} remaining]"
+_SHELL_LIMIT_MSG = (
+    "[System: Shell execution is no longer available for this session. "
+    "read_file, write_file, and edit_file are still fully operational. "
+    "Please now: check whether there are important notes or lessons to record, "
+    "and whether task progress needs to be updated. "
+    "Then write a brief summary of what you accomplished to wrap up.]"
+)
 
 
 # =============================================================================
@@ -304,11 +293,10 @@ def run_round(
                     total_tool_calls += 1
                     if tool_callback:
                         tool_callback(total_tool_calls)
-                    hint = _budget_hint(total_tool_calls, normal_limit)
                     messages.append({
                         "role": "tool",
                         "tool_call_id": call_id,
-                        "content": f"{hint}\n\n{result}",
+                        "content": result,
                     })
                     if logger:
                         logger.tool_result(result)
@@ -317,21 +305,17 @@ def run_round(
             if logger:
                 logger.tool_call(func_name, args)
 
-            if total_tool_calls >= normal_limit:
-                result = (
-                    f"[System: Tool budget exhausted ({total_tool_calls}/{normal_limit}). "
-                    "Please stop calling tools and let the round end.]"
-                )
+            if total_tool_calls >= normal_limit and func_name == "shell_execute":
                 total_tool_calls += 1
                 if tool_callback:
                     tool_callback(total_tool_calls)
                 messages.append({
                     "role": "tool",
                     "tool_call_id": call_id,
-                    "content": result,
+                    "content": _SHELL_LIMIT_MSG,
                 })
                 if logger:
-                    logger.tool_result(result)
+                    logger.tool_result(_SHELL_LIMIT_MSG)
                 continue
 
             if logger:
@@ -341,11 +325,10 @@ def run_round(
             if tool_callback:
                 tool_callback(total_tool_calls)
 
-            hint = _budget_hint(total_tool_calls, normal_limit)
             messages.append({
                 "role": "tool",
                 "tool_call_id": call_id,
-                "content": f"{hint}\n\n{result}",
+                "content": result,
             })
             if logger:
                 logger.tool_result(result)
