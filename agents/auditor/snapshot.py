@@ -686,6 +686,7 @@ def update_snapshot(
     snapshot_model: str | None,
     main_model: str,
     api_key: str | None = None,
+    api_base: str = "",
     logger: Any = None,
 ) -> dict:
     """
@@ -737,13 +738,16 @@ def update_snapshot(
             # Resolve API key for this model
             model_key = _resolve_snapshot_api_key(model, api_key)
 
-            response = litellm.completion(
+            completion_kwargs = dict(
                 model=model,
                 messages=messages,
                 api_key=model_key,
                 stream=False,
-                temperature=0.1,  # Low temperature for factual output
+                temperature=0.1,
             )
+            if api_base:
+                completion_kwargs["api_base"] = api_base
+            response = litellm.completion(**completion_kwargs)
 
             content = response.choices[0].message.content or ""
 

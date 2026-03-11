@@ -32,11 +32,18 @@ def resolve_api_key(model: str) -> str | None:
         "ANTHROPIC": "ANTHROPIC_API_KEY",
         "GOOGLE": "GOOGLE_API_KEY",
         "GEMINI": "GOOGLE_API_KEY",
+        "MINIMAX": "MINIMAX_API_KEY",
     }
 
     env_name = key_map.get(provider)
     if env_name:
         return os.environ.get(env_name)
+
+    # Fallback: try {PROVIDER}_API_KEY for any unknown provider
+    fallback_env = f"{provider}_API_KEY"
+    val = os.environ.get(fallback_env)
+    if val:
+        return val
 
     return None
 

@@ -244,6 +244,7 @@ def run_activation_loop(
                 snapshot_model=snapshot_model if snapshot_model else None,
                 main_model=model,
                 api_key=api_key,
+                api_base=api_base,
                 logger=logger,
             )
         except SnapshotUpdateError as e:
